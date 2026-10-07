@@ -1,20 +1,50 @@
-export const getToken = () => localStorage.getItem('token');
-export const setToken = (t) => (t ? localStorage.setItem('token', t) : localStorage.removeItem('token'));
+const BASE =
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:5000/api';
 
-async function request(url, method = 'GET', body) {
-  const token = getToken();
-  const res = await fetch('/api' + url, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
-    body: body && JSON.stringify(body),
+async function request(path, options = {}) {
+  const token = localStorage.getItem('token');
+
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token
+        ? { Authorization: `Bearer ${token}` }
+        : {}),
+      ...(options.headers || {}),
+    },
   });
-  if (res.status === 401 && !url.startsWith('/auth/')) { setToken(null); window.dispatchEvent(new Event('auth:logout')); }
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
-  return res.json();
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      data.error || data.message || `Request failed: ${res.status}`
+    );
+  }
+
+  return data;
 }
+
 export const api = {
-  get: (u) => request(u),
-  post: (u, b) => request(u, 'POST', b),
-  put: (u, b) => request(u, 'PUT', b),
-  del: (u) => request(u, 'DELETE'),
+  get: (path) =>
+    request(path),
+
+  post: (path, body) =>
+    request(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  put: (path, body) =>
+    request(path, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  del: (path) =>
+    request(path, {
+      method: 'DELETE',
+    }),
 };
