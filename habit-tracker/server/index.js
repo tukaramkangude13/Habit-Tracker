@@ -140,7 +140,27 @@ crud('habits', Habit, (id, userId) => Day.updateMany({ userId }, { $pull: { done
 crud('goals', Goal);
 crud('reflections', Reflection);
 crud('expenses', Expense);
+const NutritionProfile = mongoose.model('NutritionProfile', new Schema({
+  ...owner, age: Number, sex: String, height: Number, weight: Number, target: Number, activity: String, targetDate: String,
+}, { timestamps: true }));
+const FoodLog = mongoose.model('FoodLog', new Schema({
+  ...owner, date: { type: String, required: true },
+  name: { type: String, required: true, trim: true, maxlength: 60 },
+  meal: { type: String, enum: ['Breakfast', 'Lunch', 'Snack', 'Dinner'], default: 'Snack' },
+  qty: { type: Number, default: 1, min: 0.1, max: 20 },
+  kcal: { type: Number, required: true, min: 0, max: 5000 }, protein: { type: Number, default: 0, min: 0, max: 300 },
+}, { timestamps: true }));
+const weightSchema = new Schema({ ...owner, date: { type: String, required: true }, kg: { type: Number, required: true, min: 25, max: 250 } });
+weightSchema.index({ userId: 1, date: 1 }, { unique: true });
+const WeightLog = mongoose.model('WeightLog', weightSchema);
 
+crud('foodlogs', FoodLog);
+app.get('/api/nutrition/profile', wrap(async (req) => (await NutritionProfile.findOne({ userId: req.userId })) || null));
+app.put('/api/nutrition/profile', wrap((req) =>
+  NutritionProfile.findOneAndUpdate({ userId: req.userId }, { ...req.body, userId: req.userId }, { upsert: true, new: true, runValidators: true })));
+app.get('/api/weights', wrap((req) => WeightLog.find({ userId: req.userId }).sort('date')));
+app.put('/api/weights/:date', wrap((req) =>
+  WeightLog.findOneAndUpdate({ userId: req.userId, date: req.params.date }, { kg: Number(req.body.kg) }, { upsert: true, new: true, runValidators: true })));
 app.get('/api/days', wrap((req) => Day.find({ userId: req.userId })));
 app.put('/api/days/:date', wrap((req) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) throw new Error('Invalid date');

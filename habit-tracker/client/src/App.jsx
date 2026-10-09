@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import { bestStreak, doneCount, key, streakOf } from './lib';
-
+import Nutrition from './components/Nutrition';
 import Header from './components/Header';
 import ProgressCard from './components/ProgressCard';
 import StreakStats from './components/StreakStats';
@@ -14,8 +14,14 @@ import { MoodTracker, SleepTracker, DailyNotes } from './components/Wellness';
 import MonthlyReport from './components/MonthlyReport';
 import PerformanceCard from './components/PerformanceCard';
 import Reflection from './components/Reflection';
+import Insights from './components/Insights';
 
-import { CheckSquare, Wallet } from 'lucide-react';
+import {
+  CheckSquare,
+  Wallet,
+  Lightbulb,
+  Utensils,
+} from 'lucide-react';
 import Expenses from './components/Expenses';
 
 // Re-check every minute so a new day automatically shows a fresh checklist.
@@ -175,10 +181,10 @@ export default function App({ user, onLogout }) {
 
       perfect: habits.length
         ? keys.filter(
-            (date) =>
-              doneCount(days[date], habits) ===
-              habits.length
-          ).length
+          (date) =>
+            doneCount(days[date], habits) ===
+            habits.length
+        ).length
         : 0,
     };
   }, [habits, days]);
@@ -210,7 +216,8 @@ export default function App({ user, onLogout }) {
           streak={stats.current}
           dark={dark}
           onToggleTheme={() => setDark(!dark)}
-user={user} onLogout={onLogout}
+          user={user}
+          onLogout={onLogout}
         />
 
         {/* Error */}
@@ -230,18 +237,19 @@ user={user} onLogout={onLogout}
         >
           {[
             ['habits', 'Habits', CheckSquare],
+            ['insights', 'Insights', Lightbulb],
             ['expenses', 'Expenses', Wallet],
+            ['nutrition', 'Nutrition', Utensils]
           ].map(([id, label, Icon]) => (
             <button
               key={id}
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition ${
-                tab === id
+              className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === id
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-              }`}
+                }`}
             >
               <Icon size={16} />
               {label}
@@ -250,95 +258,111 @@ user={user} onLogout={onLogout}
         </nav>
 
         {/* HABITS TAB */}
-        {tab === 'habits' ? (
-          <div className="grid gap-6 lg:grid-cols-3">
+        {tab === 'habits' ?
+          (
+            <div className="grid gap-6 lg:grid-cols-3">
 
-            {/* LEFT SIDE */}
-            <div className="space-y-6 lg:col-span-2">
+              {/* LEFT SIDE */}
+              <div className="space-y-6 lg:col-span-2">
 
-              <ProgressCard
-                done={doneCount(day, habits)}
-                total={habits.length}
-              />
+                <ProgressCard
+                  done={doneCount(day, habits)}
+                  total={habits.length}
+                />
 
-              <StreakStats {...stats} />
+                <StreakStats {...stats} />
 
-              <HabitList
-                {...shared}
-                onToggle={toggle}
-                onSave={upsert('habits', setHabits)}
-                onDelete={remove('habits', setHabits)}
-              />
+                <HabitList
+                  {...shared}
+                  onToggle={toggle}
+                  onSave={upsert('habits', setHabits)}
+                  onDelete={remove('habits', setHabits)}
+                />
 
-              <WeeklyTracker
-                {...shared}
-                onToggle={toggle}
-              />
+                <WeeklyTracker
+                  {...shared}
+                  onToggle={toggle}
+                />
 
-              <PerformanceCard
-                {...shared}
-              />
+                <PerformanceCard
+                  {...shared}
+                />
 
-              <GoalList
-                goals={goals}
-                onSave={upsert('goals', setGoals)}
-                onDelete={remove('goals', setGoals)}
-                onPatch={patchGoal}
-              />
+                <GoalList
+                  goals={goals}
+                  onSave={upsert('goals', setGoals)}
+                  onDelete={remove('goals', setGoals)}
+                  onPatch={patchGoal}
+                />
 
+              </div>
+
+              {/* RIGHT SIDE */}
+              <div className="min-w-0 space-y-6">
+
+                <MoodTracker
+                  mood={day.mood}
+                  onChange={(mood) =>
+                    saveDay(today, { mood })
+                  }
+                />
+
+                <SleepTracker
+                  sleep={day.sleep}
+                  date={today}
+                  onChange={(sleep) =>
+                    saveDay(today, { sleep })
+                  }
+                />
+
+                <DailyNotes
+                  note={day.note}
+                  date={today}
+                  onSave={(note) =>
+                    saveDay(today, { note })
+                  }
+                />
+
+                <Reflection
+                  today={today}
+                />
+
+                <WeeklyAnalytics
+                  {...shared}
+                />
+
+                <HabitHeatmap
+                  {...shared}
+                />
+
+                <MonthlyReport
+                  {...shared}
+                />
+
+              </div>
             </div>
 
-            {/* RIGHT SIDE */}
-            <div className="min-w-0 space-y-6">
+          ) : tab === 'insights' ?
+            (
 
-              <MoodTracker
-                mood={day.mood}
-                onChange={(mood) =>
-                  saveDay(today, { mood })
-                }
-              />
+              /* INSIGHTS TAB */
+              <div className="mx-auto max-w-2xl">
+                <Insights {...shared} />
+              </div>
 
-              <SleepTracker
-                sleep={day.sleep}
-                date={today}
-                onChange={(sleep) =>
-                  saveDay(today, { sleep })
-                }
-              />
+            )
 
-              <DailyNotes
-                note={day.note}
-                date={today}
-                onSave={(note) =>
-                  saveDay(today, { note })
-                }
-              />
+            : tab === 'nutrition' ? (
+              <Nutrition today={today} />
+            ) :
+              (
 
-              <Reflection
-                today={today}
-              />
+                /* EXPENSES TAB */
+                <Expenses today={today} />
 
-              <WeeklyAnalytics
-                {...shared}
-              />
+              )
 
-              <HabitHeatmap
-                {...shared}
-              />
-
-              <MonthlyReport
-                {...shared}
-              />
-
-            </div>
-          </div>
-
-        ) : (
-
-          /* EXPENSES TAB */
-          <Expenses today={today} />
-
-        )}
+        }
 
       </div>
     </div>
