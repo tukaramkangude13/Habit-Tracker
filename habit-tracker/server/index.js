@@ -140,6 +140,13 @@ crud('habits', Habit, (id, userId) => Day.updateMany({ userId }, { $pull: { done
 crud('goals', Goal);
 crud('reflections', Reflection);
 crud('expenses', Expense);
+const TimeLog = mongoose.model('TimeLog', new Schema({
+  ...owner, date: { type: String, required: true },
+  category: { type: String, required: true, maxlength: 40 },
+  minutes: { type: Number, required: true, min: 1, max: 720 },
+  note: { type: String, default: '', maxlength: 100 },
+}, { timestamps: true }));
+crud('timelogs', TimeLog);
 const NutritionProfile = mongoose.model('NutritionProfile', new Schema({
   ...owner, age: Number, sex: String, height: Number, weight: Number, target: Number, activity: String, targetDate: String,
 }, { timestamps: true }));

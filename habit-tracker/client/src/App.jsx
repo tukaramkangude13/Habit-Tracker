@@ -15,12 +15,13 @@ import MonthlyReport from './components/MonthlyReport';
 import PerformanceCard from './components/PerformanceCard';
 import Reflection from './components/Reflection';
 import Insights from './components/Insights';
-
+import TimeAudit from './components/TimeAudit';
 import {
   CheckSquare,
   Wallet,
   Lightbulb,
   Utensils,
+  Hourglass
 } from 'lucide-react';
 import Expenses from './components/Expenses';
 
@@ -239,7 +240,8 @@ export default function App({ user, onLogout }) {
             ['habits', 'Habits', CheckSquare],
             ['insights', 'Insights', Lightbulb],
             ['expenses', 'Expenses', Wallet],
-            ['nutrition', 'Nutrition', Utensils]
+            ['nutrition', 'Nutrition', Utensils],
+            ['time', 'Time Audit', Hourglass]
           ].map(([id, label, Icon]) => (
             <button
               key={id}
@@ -352,8 +354,10 @@ export default function App({ user, onLogout }) {
 
             )
 
-            : tab === 'nutrition' ? (
+            :                tab === 'nutrition' ? (
               <Nutrition today={today} />
+            ) :                tab === 'time' ? (
+              <TimeAudit today={today} />
             ) :
               (
 
