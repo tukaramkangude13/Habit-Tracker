@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'node:path';
+import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url';
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) { console.error('[auth] JWT_SECRET is missing in server/.env'); process.exit(1); }
@@ -119,7 +120,27 @@ app.get('/api/auth/me', auth, wrap(async (req) => {
   if (!user) throw new Error('Account not found.');
   return { user: publicUser(user) };
 }));
+const DeviceKey = mongoose.model('DeviceKey', new Schema({ ...owner, key: { type: String, unique: true } }));
+const stSchema = new Schema({
+  ...owner, date: { type: String, required: true },
+  totalMinutes: { type: Number, min: 0, max: 1440 },
+  apps: [{ name: String, pkg: String, minutes: Number }],
+});
+stSchema.index({ userId: 1, date: 1 }, { unique: true });
+const ScreenTime = mongoose.model('ScreenTime', stSchema);
 
+app.post('/api/device/screentime', wrap(async (req) => {
+  const dk = await DeviceKey.findOne({ key: String(req.headers['x-device-key'] || '') });
+  if (!dk) throw new Error('Invalid device key.');
+  const { date, apps } = req.body;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Array.isArray(apps)) throw new Error('Bad payload.');
+  const clean = apps.slice(0, 60).map((a) => ({
+    name: String(a.name).slice(0, 40), pkg: String(a.pkg).slice(0, 100), minutes: Math.max(0, Math.round(Number(a.minutes) || 0)),
+  })).filter((a) => a.minutes > 0);
+  const totalMinutes = Math.min(1440, clean.reduce((s, a) => s + a.minutes, 0));
+  await ScreenTime.findOneAndUpdate({ userId: dk.userId, date }, { totalMinutes, apps: clean }, { upsert: true });
+  return { ok: true };
+}));
 // Everything under /api except /api/auth/* requires a valid token.
 app.use('/api', (req, res, next) => (req.path.startsWith('/auth/') ? next() : auth(req, res, next)));
 
@@ -140,6 +161,13 @@ crud('habits', Habit, (id, userId) => Day.updateMany({ userId }, { $pull: { done
 crud('goals', Goal);
 crud('reflections', Reflection);
 crud('expenses', Expense);
+app.get('/api/screentime', wrap((req) => ScreenTime.find({ userId: req.userId }).sort('date')));
+app.get('/api/device/key', wrap(async (req) => {
+  const dk = (await DeviceKey.findOne({ userId: req.userId })) || (await DeviceKey.create({ userId: req.userId, key: crypto.randomBytes(24).toString('hex') }));
+  return { key: dk.key };
+}));
+app.post('/api/device/key/reset', wrap((req) =>
+  DeviceKey.findOneAndUpdate({ userId: req.userId }, { key: crypto.randomBytes(24).toString('hex') }, { upsert: true, new: true })));
 const TimeLog = mongoose.model('TimeLog', new Schema({
   ...owner, date: { type: String, required: true },
   category: { type: String, required: true, maxlength: 40 },

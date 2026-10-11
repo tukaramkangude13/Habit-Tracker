@@ -15,6 +15,7 @@ import MonthlyReport from './components/MonthlyReport';
 import PerformanceCard from './components/PerformanceCard';
 import Reflection from './components/Reflection';
 import Insights from './components/Insights';
+import PhoneUsage from './components/PhoneUsage';
 import TimeAudit from './components/TimeAudit';
 import {
   CheckSquare,
@@ -357,8 +358,7 @@ export default function App({ user, onLogout }) {
             :                tab === 'nutrition' ? (
               <Nutrition today={today} />
             ) :                tab === 'time' ? (
-              <TimeAudit today={today} />
-            ) :
+<div className="space-y-6"><TimeAudit today={today} /><PhoneUsage today={today} /></div>            ) :
               (
 
                 /* EXPENSES TAB */
