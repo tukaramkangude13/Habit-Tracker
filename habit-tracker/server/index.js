@@ -221,7 +221,6 @@ app.put('/api/settings/:key', wrap(async (req) => {
   await Setting.findOneAndUpdate({ userId: req.userId, key: req.params.key }, { value }, { upsert: true });
   return { ok: true };
 }));
-//mongodb+srv://tukaramkangude13:Tukaram1qw23e@tukaramkangude13.g2bue.mongodb.net/
 // ---------- Database connection (with diagnostics) ----------
 const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/habit-tracker';
 console.log('[db] MONGO_URI found in .env:', Boolean(process.env.MONGO_URI));
