@@ -188,7 +188,17 @@ const FoodLog = mongoose.model('FoodLog', new Schema({
 const weightSchema = new Schema({ ...owner, date: { type: String, required: true }, kg: { type: Number, required: true, min: 25, max: 250 } });
 weightSchema.index({ userId: 1, date: 1 }, { unique: true });
 const WeightLog = mongoose.model('WeightLog', weightSchema);
-
+const Note = mongoose.model('Note', new Schema({
+  ...owner,
+  title: { type: String, required: true, trim: true, maxlength: 120 },
+  type: { type: String, enum: ['Personal', 'Spiritual', 'Book'], default: 'Personal' },
+  book: { type: String, default: '', maxlength: 120 },
+  page: { type: String, default: '', maxlength: 20 },
+  content: { type: String, default: '', maxlength: 20000 },
+  summary: { type: String, default: '', maxlength: 1000 },
+  pinned: { type: Boolean, default: false },
+}, { timestamps: true }));
+crud('notes', Note);
 crud('foodlogs', FoodLog);
 app.get('/api/nutrition/profile', wrap(async (req) => (await NutritionProfile.findOne({ userId: req.userId })) || null));
 app.put('/api/nutrition/profile', wrap((req) =>
@@ -211,13 +221,13 @@ app.put('/api/settings/:key', wrap(async (req) => {
   await Setting.findOneAndUpdate({ userId: req.userId, key: req.params.key }, { value }, { upsert: true });
   return { ok: true };
 }));
-
+//mongodb+srv://tukaramkangude13:Tukaram1qw23e@tukaramkangude13.g2bue.mongodb.net/
 // ---------- Database connection (with diagnostics) ----------
 const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/habit-tracker';
 console.log('[db] MONGO_URI found in .env:', Boolean(process.env.MONGO_URI));
 console.log('[db] Connecting to:', uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
 import dns from 'node:dns';
-dns.setServers(['8.8.8.8', '1.1.1.1']);
+dns.setServers(['172.30.172.126'])
 function explain(e) {
   const m = `${e.message} ${e.cause?.message || ''}`;
   if (/bad auth|Authentication failed/i.test(m)) return 'Wrong username or password, or the user has no read/write role.';
