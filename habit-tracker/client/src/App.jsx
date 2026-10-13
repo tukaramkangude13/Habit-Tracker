@@ -17,13 +17,8 @@ import Reflection from './components/Reflection';
 import Insights from './components/Insights';
 import PhoneUsage from './components/PhoneUsage';
 import TimeAudit from './components/TimeAudit';
-import {
-  CheckSquare,
-  Wallet,
-  Lightbulb,
-  Utensils,
-  Hourglass
-} from 'lucide-react';
+import { CheckSquare, Wallet, Lightbulb, Utensils, Hourglass, BookOpen } from 'lucide-react';
+import Notes from './components/Notes';
 import Expenses from './components/Expenses';
 
 // Re-check every minute so a new day automatically shows a fresh checklist.
@@ -233,23 +228,21 @@ export default function App({ user, onLogout }) {
         )}
 
         {/* Tabs */}
-        <nav
-          role="tablist"
-          className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800"
-        >
+      <nav role="tablist" className="-mx-4 flex gap-1 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800">
           {[
             ['habits', 'Habits', CheckSquare],
             ['insights', 'Insights', Lightbulb],
             ['expenses', 'Expenses', Wallet],
             ['nutrition', 'Nutrition', Utensils],
-            ['time', 'Time Audit', Hourglass]
+            ['time', 'Time Audit', Hourglass],
+            ['notes', 'Notes', BookOpen]
           ].map(([id, label, Icon]) => (
             <button
               key={id}
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === id
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === id
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                 }`}
@@ -357,8 +350,12 @@ export default function App({ user, onLogout }) {
 
             :                tab === 'nutrition' ? (
               <Nutrition today={today} />
+              ) :                tab === 'notes' ? (
+              <Notes />
+            ):                tab === 'notes' ? (
+              <Notes />
             ) :                tab === 'time' ? (
-<div className="space-y-6"><TimeAudit today={today} /><PhoneUsage today={today} /></div>            ) :
+<div className="space-y-6"><PhoneUsage today={today} /><TimeAudit today={today} /></div>            ) :
               (
 
                 /* EXPENSES TAB */
