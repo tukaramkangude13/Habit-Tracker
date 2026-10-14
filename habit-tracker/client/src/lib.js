@@ -34,3 +34,22 @@ export const goalPct = (g) => {
   if (m.length) return Math.round((m.filter((x) => x.done).length / m.length) * 100);
   return g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
 };
+// Due vs hit for one habit in a month. Daily: every day. Weekdays: Mon-Fri. Weekly: one hit per Mon-Sun week.
+// Only days from the habit's creation date up to today count.
+export const habitStats = (h, days, ks, today) => {
+  const start = key(new Date(h.createdAt));
+  let due = 0, hit = 0;
+  const weeks = {};
+  for (const k of ks) {
+    if (k > today || k < start) continue;
+    const dow = parse(k).getDay();
+    const done = !!days[k]?.done?.includes(h._id);
+    if (h.frequency === 'weekly') {
+      const w = key(addDays(parse(k), -((dow + 6) % 7)));
+      weeks[w] = weeks[w] || done;
+    } else if (h.frequency === 'weekdays' && (dow === 0 || dow === 6)) continue;
+    else { due++; if (done) hit++; }
+  }
+  const w = Object.values(weeks);
+  return { due: due + w.length, hit: hit + w.filter(Boolean).length };
+};
