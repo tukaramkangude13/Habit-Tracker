@@ -258,8 +258,7 @@ const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/habit-tracker';
 console.log('[db] MONGO_URI found in .env:', Boolean(process.env.MONGO_URI));
 console.log('[db] Connecting to:', uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
 import dns from 'node:dns';
-dns.setServers(['172.30.172.126'])
-function explain(e) {
+if (!process.env.VERCEL && !process.env.RENDER) dns.setServers(['172.30.172.126']);function explain(e) {
   const m = `${e.message} ${e.cause?.message || ''}`;
   if (/bad auth|Authentication failed/i.test(m)) return 'Wrong username or password, or the user has no read/write role.';
   if (/ENOTFOUND|querySrv|ESERVFAIL/i.test(m)) return 'Cluster host could not be resolved. Check for typos, or try another network or DNS (8.8.8.8).';
