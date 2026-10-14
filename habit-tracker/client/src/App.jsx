@@ -17,10 +17,10 @@ import Reflection from './components/Reflection';
 import Insights from './components/Insights';
 import PhoneUsage from './components/PhoneUsage';
 import TimeAudit from './components/TimeAudit';
-import { CheckSquare, Wallet, Lightbulb, Utensils, Hourglass, BookOpen } from 'lucide-react';
+import { CheckSquare, Wallet, Lightbulb, Utensils, Hourglass, BookOpen, BarChart3 } from 'lucide-react';
 import Notes from './components/Notes';
 import Expenses from './components/Expenses';
-
+import Report from './components/Report';
 // Re-check every minute so a new day automatically shows a fresh checklist.
 function useToday() {
   const [t, setT] = useState(key());
@@ -228,13 +228,14 @@ export default function App({ user, onLogout }) {
         )}
 
         {/* Tabs */}
-      <nav role="tablist" className="-mx-4 flex gap-1 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800">
+        <nav role="tablist" className="-mx-4 flex gap-1 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800">
           {[
             ['habits', 'Habits', CheckSquare],
             ['insights', 'Insights', Lightbulb],
             ['expenses', 'Expenses', Wallet],
             ['nutrition', 'Nutrition', Utensils],
             ['time', 'Time Audit', Hourglass],
+            ['report', 'Report', BarChart3],
             ['notes', 'Notes', BookOpen]
           ].map(([id, label, Icon]) => (
             <button
@@ -243,8 +244,8 @@ export default function App({ user, onLogout }) {
               aria-selected={tab === id}
               onClick={() => setTab(id)}
               className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === id
-                  ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                 }`}
             >
               <Icon size={16} />
@@ -348,14 +349,16 @@ export default function App({ user, onLogout }) {
 
             )
 
-            :                tab === 'nutrition' ? (
+            :                tab === 'report' ? (
+              <Report {...shared} />
+            ) :                tab === 'nutrition' ? (
               <Nutrition today={today} />
-              ) :                tab === 'notes' ? (
+            ) : tab === 'notes' ? (
               <Notes />
-            ):                tab === 'notes' ? (
+            ) : tab === 'notes' ? (
               <Notes />
-            ) :                tab === 'time' ? (
-<div className="space-y-6"><PhoneUsage today={today} /><TimeAudit today={today} /></div>            ) :
+            ) : tab === 'time' ? (
+              <div className="space-y-6"><PhoneUsage today={today} /><TimeAudit today={today} /></div>) :
               (
 
                 /* EXPENSES TAB */
