@@ -6,7 +6,7 @@ export const ACTIVITY = [['sedentary', 'Mostly sitting (classes, studying)', 1.2
 // [name, kcal, protein g] per serving. Approximate values.
 export const FOODS = [['Roti (1)', 100, 3], ['Cooked rice (1 cup)', 200, 4], ['Dal (1 bowl)', 150, 9], ['Paneer (100 g)', 265, 18],
   ['Boiled egg (1)', 78, 6], ['Full-fat milk (250 ml)', 150, 8], ['Curd (1 bowl)', 120, 7], ['Banana (1)', 105, 1], ['Peanuts (30 g)', 170, 7],
-  ['Peanut butter (2 tbsp)', 190, 8], ['Oats with milk (1 bowl)', 270, 12], ['Soya chunks (30 g dry)', 104, 16], ['Poha (1 plate)', 250, 5],
+  ['Peanut butter (2 tbsp)', 190, 8], ['Oats with milk (1 bowl)', 380, 16], ['Soya chunks (30 g dry)', 104, 16], ['Poha (1 plate)', 250, 5],
   ['Chicken curry (150 g)', 250, 25], ['Whey protein (1 scoop)', 120, 24], ['Chana (1 bowl)', 210, 11]];
 
 const r = Math.round;

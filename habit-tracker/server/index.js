@@ -222,43 +222,41 @@ app.put('/api/settings/:key', wrap(async (req) => {
   return { ok: true };
 }));
 app.get('/api/report', wrap(async (req) => {
-  const month = String(req.query.month || '');
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('month must be YYYY-MM');
-  const [y, m] = month.split('-').map(Number);
-  const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
-  const q = { userId: req.userId, date: { $gte: `${month}-01`, $lt: end } };
-  const [days, expenses, logs, screen, weights, profile, firstLog, settings] = await Promise.all([
-    Day.find(q).select('date sleep').lean(),
-    Expense.find(q).select('amount category').lean(),
-    TimeLog.find(q).select('minutes category').lean(),
-    ScreenTime.find(q).select('totalMinutes').lean(),
-    WeightLog.find(q).sort('date').select('kg').lean(),
-    NutritionProfile.findOne({ userId: req.userId }).lean(),
-    TimeLog.findOne({ userId: req.userId }).sort('date').select('date').lean(),
-    Setting.find({ userId: req.userId }).lean(),
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  const { from, to } = req.query;
+  if (!re.test(from) || !re.test(to)) throw new Error('from and to must be YYYY-MM-DD');
+  const q = { userId: req.userId, date: { $gte: from, $lte: to } };
+  const [exp, logs, scr, food] = await Promise.all([
+    Expense.find(q).select('date amount').lean(),
+    TimeLog.find(q).select('date minutes').lean(),
+    ScreenTime.find(q).select('date totalMinutes').lean(),
+    FoodLog.find(q).select('date kcal protein').lean(),
   ]);
-  const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
-  const group = (a, k, f) => {
-    const o = {};
-    a.forEach((x) => { o[x[k]] = (o[x[k]] || 0) + f(x); });
-    return Object.entries(o).sort((p, r) => r[1] - p[1]);
-  };
-  const sleeps = days.filter((d) => typeof d.sleep === 'number');
-  return {
-    sleep: { avg: sleeps.length ? sum(sleeps, (d) => d.sleep) / sleeps.length : null },
-    spend: { total: sum(expenses, (e) => e.amount), byCategory: group(expenses, 'category', (e) => e.amount) },
-    wasted: { total: sum(logs, (l) => l.minutes), byCategory: group(logs, 'category', (l) => l.minutes), firstDate: firstLog?.date || null },
-    screen: { avg: screen.length ? sum(screen, (s) => s.totalMinutes || 0) / screen.length : null },
-    weight: { start: weights[0]?.kg ?? null, end: weights.at(-1)?.kg ?? null, target: profile?.target ?? null },
-    settings: Object.fromEntries(settings.map((s) => [s.key, s.value])),
-  };
+  const out = {};
+  const row = (d) => (out[d] ||= {});
+  exp.forEach((e) => { const r = row(e.date); r.spend = (r.spend || 0) + e.amount; });
+  logs.forEach((l) => { const r = row(l.date); r.wasted = (r.wasted || 0) + l.minutes; });
+  scr.forEach((s) => { row(s.date).screen = s.totalMinutes; });
+    food.forEach((f) => { const r = row(f.date); r.kcal = (r.kcal || 0) + f.kcal; r.protein = (r.protein || 0) + (f.protein || 0); });
+  return out;
+}));
+app.get('/api/export', wrap(async (req) => {
+  const names = ['Habit', 'Goal', 'Day', 'Reflection', 'Expense', 'Setting', 'ScreenTime',
+    'TimeLog', 'NutritionProfile', 'FoodLog', 'WeightLog', 'Note'];
+  const user = await User.findById(req.userId).select('name email createdAt').lean();
+  const data = {};
+  for (const n of names) {
+    const Model = mongoose.models[n]; // skips a model you haven't added, e.g. Note
+    if (Model) data[n] = await Model.find({ userId: req.userId }).lean();
+  }
+  return { exportedAt: new Date().toISOString(), user, data };
 }));
 // ---------- Database connection (with diagnostics) ----------
 const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/habit-tracker';
 console.log('[db] MONGO_URI found in .env:', Boolean(process.env.MONGO_URI));
 console.log('[db] Connecting to:', uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
 import dns from 'node:dns';
-if (!process.env.VERCEL && !process.env.RENDER) dns.setServers(['172.30.172.126']);function explain(e) {
+if (!process.env.VERCEL && !process.env.RENDER) dns.setServers(['8.8.8.8']);function explain(e) {
   const m = `${e.message} ${e.cause?.message || ''}`;
   if (/bad auth|Authentication failed/i.test(m)) return 'Wrong username or password, or the user has no read/write role.';
   if (/ENOTFOUND|querySrv|ESERVFAIL/i.test(m)) return 'Cluster host could not be resolved. Check for typos, or try another network or DNS (8.8.8.8).';
