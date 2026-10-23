@@ -6,7 +6,8 @@ import { plan } from '../nutrition';
 import { downloadBackup } from '../backup';
 import { downloadReportCsv, printReport } from '../reportExport';
 import { Card, btn, btnP } from './ui';
-
+   import TaskReport from './TaskReport';
+   import NutritionReport from './NutritionReport';
 const FOLLOW = 0.9; // a day "follows the plan" at 90% or more of both the calorie and the protein target
 
 const MOODS = { great: ['😄', 4], good: ['🙂', 3], okay: ['😐', 2], low: ['😔', 1], bad: ['😫', 0] };
@@ -40,7 +41,7 @@ const FOOD_GROUPS = [
 const dayRate = (d, habits, days) => {
   if (!days[d]) return null;
   const dow = parse(d).getDay();
-  const due = habits.filter((h) => h.frequency !== 'weekly' && key(new Date(h.createdAt)) <= d && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
+  const due = habits.filter((h) => h.frequency !== 'weekly' && key(new Date(h.createdAt)) <= d && (!h.archivedOn || d < h.archivedOn) && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
   if (!due.length) return null;
   const done = due.filter((h) => days[d].done?.includes(h._id)).length;
   return { done, due: due.length };
@@ -205,6 +206,20 @@ export default function Report({ habits, days, today }) {
           </div>
         </div>
       </Card>
+      <TaskReport
+  habits={habits}
+  days={days}
+  today={today}
+/>
+
+{/* Detailed nutrition report */}
+<NutritionReport today={today} />
+
+{!extra && !err && (
+  <p className="py-10 text-center text-sm text-zinc-500">
+    Loading...
+  </p>
+)}
 
       {!extra && !err && <p className="py-10 text-center text-sm text-zinc-500">Loading...</p>}
 

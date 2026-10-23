@@ -12,8 +12,7 @@ if (!JWT_SECRET) { console.error('[auth] JWT_SECRET is missing in server/.env');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
-
+app.use(express.json({ limit: '4mb' }));
 const { Schema } = mongoose;
 const owner = { userId: { type: Schema.Types.ObjectId, required: true, index: true } };
 
@@ -29,7 +28,8 @@ const Habit = mongoose.model('Habit', new Schema({
   icon: { type: String, default: 'target' },
   frequency: { type: String, enum: ['daily', 'weekdays', 'weekly'], default: 'daily' },
   goal: { type: String, default: '' },
-  reminder: { type: String, default: '' },
+   reminder: { type: String, default: '' },
+  archivedOn: { type: String, default: '' }, // first date the habit no longer applies; '' = still active
 }, { timestamps: true }));
 
 const Goal = mongoose.model('Goal', new Schema({
@@ -178,27 +178,89 @@ crud('timelogs', TimeLog);
 const NutritionProfile = mongoose.model('NutritionProfile', new Schema({
   ...owner, age: Number, sex: String, height: Number, weight: Number, target: Number, activity: String, targetDate: String,
 }, { timestamps: true }));
-const FoodLog = mongoose.model('FoodLog', new Schema({
-  ...owner, date: { type: String, required: true },
-  name: { type: String, required: true, trim: true, maxlength: 60 },
-  meal: { type: String, enum: ['Breakfast', 'Lunch', 'Snack', 'Dinner'], default: 'Snack' },
-  qty: { type: Number, default: 1, min: 0.1, max: 20 },
-  kcal: { type: Number, required: true, min: 0, max: 5000 }, protein: { type: Number, default: 0, min: 0, max: 300 },
-}, { timestamps: true }));
+const FoodLog = mongoose.model(
+  'FoodLog',
+  new Schema(
+    {
+      ...owner,
+
+      date: {
+        type: String,
+        required: true
+      },
+
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 60
+      },
+
+      meal: {
+        type: String,
+        enum: ['Breakfast', 'Lunch', 'Snack', 'Dinner'],
+        default: 'Snack'
+      },
+
+      qty: {
+        type: Number,
+        default: 1,
+        min: 0.1,
+        max: 20
+      },
+
+      kcal: {
+        type: Number,
+        required: true,
+        min: 0,
+        max: 5000
+      },
+
+      protein: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 300
+      },
+
+      carbs: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 1000
+      },
+
+      fat: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 500
+      }
+    },
+    { timestamps: true }
+  )
+);
 const weightSchema = new Schema({ ...owner, date: { type: String, required: true }, kg: { type: Number, required: true, min: 25, max: 250 } });
 weightSchema.index({ userId: 1, date: 1 }, { unique: true });
 const WeightLog = mongoose.model('WeightLog', weightSchema);
 const Note = mongoose.model('Note', new Schema({
   ...owner,
   title: { type: String, required: true, trim: true, maxlength: 120 },
-  type: { type: String, enum: ['Personal', 'Spiritual', 'Book'], default: 'Personal' },
+  type: { type: String, default: 'Personal', trim: true, maxlength: 40 },
+  section: { type: String, default: '', trim: true, maxlength: 40 },
   book: { type: String, default: '', maxlength: 120 },
   page: { type: String, default: '', maxlength: 20 },
-  content: { type: String, default: '', maxlength: 20000 },
+  content: { type: String, default: '', maxlength: 3500000 },
+  format: { type: String, default: 'text' },
+  preview: { type: String, default: '', maxlength: 200 },
   summary: { type: String, default: '', maxlength: 1000 },
   pinned: { type: Boolean, default: false },
 }, { timestamps: true }));
+const Topic = mongoose.model('Topic', new Schema({ ...owner, name: { type: String, required: true, trim: true, maxlength: 40 } }, { timestamps: true }));
+app.get('/api/notes', wrap((req) => Note.find({ userId: req.userId }).select('-content').sort('-updatedAt')));
+app.get('/api/notes/:id', wrap((req) => Note.findOne({ _id: req.params.id, userId: req.userId })));
 crud('notes', Note);
+crud('topics', Topic);
 crud('foodlogs', FoodLog);
 app.get('/api/nutrition/profile', wrap(async (req) => (await NutritionProfile.findOne({ userId: req.userId })) || null));
 app.put('/api/nutrition/profile', wrap((req) =>

@@ -53,3 +53,6 @@ export const habitStats = (h, days, ks, today) => {
   const w = Object.values(weeks);
   return { due: due + w.length, hit: hit + w.filter(Boolean).length };
 };
+// Habits that counted on a given date: already created, and not yet archived.
+export const habitsOn = (habits, d) =>
+  habits.filter((h) => key(new Date(h.createdAt)) <= d && (!h.archivedOn || d < h.archivedOn));

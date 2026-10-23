@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import { bestStreak, doneCount, key, streakOf } from './lib';
+import { bestStreak, doneCount, habitsOn, key, streakOf } from './lib';
 import Nutrition from './components/Nutrition';
 import Header from './components/Header';
 import ProgressCard from './components/ProgressCard';
@@ -159,30 +159,37 @@ export default function App({ user, onLogout }) {
   };
 
   // Statistics
-  const stats = useMemo(() => {
-    const active = (date) =>
-      doneCount(days[date], habits) > 0;
+  // `habits` holds every habit, archived ones included, so history stays intact.
+  // `live` is what applies today and what the screens show.
+  const live = useMemo(
+    () => habits.filter((h) => !h.archivedOn || h.archivedOn > today),
+    [habits, today]
+  );
 
+  // Removing a habit archives it from today onward. Past days keep their ticks.
+  const archiveHabit = async (id) => {
+    try {
+      const r = await api.put(`/habits/${id}`, { archivedOn: today });
+      setHabits((list) => list.map((h) => (h._id === r._id ? r : h)));
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+
+  // Statistics: each day is judged against the habits that applied on that day.
+  const stats = useMemo(() => {
+    const done = (date) => doneCount(days[date], habitsOn(habits, date));
+    const active = (date) => done(date) > 0;
     const keys = Object.keys(days).filter(active);
 
     return {
       current: streakOf(active),
-
       best: bestStreak(keys),
-
-      total: keys.reduce(
-        (total, date) =>
-          total + doneCount(days[date], habits),
-        0
-      ),
-
-      perfect: habits.length
-        ? keys.filter(
-          (date) =>
-            doneCount(days[date], habits) ===
-            habits.length
-        ).length
-        : 0,
+      total: keys.reduce((sum, date) => sum + done(date), 0),
+      perfect: keys.filter((date) => {
+        const due = habitsOn(habits, date);
+        return due.length > 0 && done(date) === due.length;
+      }).length,
     };
   }, [habits, days]);
 
@@ -197,8 +204,8 @@ export default function App({ user, onLogout }) {
 
   const day = days[today] || {};
 
-  const shared = {
-    habits,
+   const shared = {
+    habits: live,
     days,
     today,
   };
@@ -263,8 +270,8 @@ export default function App({ user, onLogout }) {
               <div className="space-y-6 lg:col-span-2">
 
                 <ProgressCard
-                  done={doneCount(day, habits)}
-                  total={habits.length}
+                                    done={doneCount(day, live)}
+                  total={live.length}
                 />
 
                 <StreakStats {...stats} />
@@ -273,8 +280,7 @@ export default function App({ user, onLogout }) {
                   {...shared}
                   onToggle={toggle}
                   onSave={upsert('habits', setHabits)}
-                  onDelete={remove('habits', setHabits)}
-                />
+                  onDelete={archiveHabit}                />
 
                 <WeeklyTracker
                   {...shared}
@@ -350,8 +356,7 @@ export default function App({ user, onLogout }) {
             )
 
             :                tab === 'report' ? (
-              <Report {...shared} />
-            ) :                tab === 'nutrition' ? (
+<Report habits={habits} days={days} today={today} />            ) :                tab === 'nutrition' ? (
               <Nutrition today={today} />
             ) : tab === 'notes' ? (
               <Notes />

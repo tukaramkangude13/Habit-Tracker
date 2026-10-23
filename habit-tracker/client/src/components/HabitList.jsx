@@ -63,7 +63,7 @@ export default function HabitList({ habits, days, today, onToggle, onSave, onDel
                 </div>
                 <span className="flex items-center gap-1 text-xs font-medium text-orange-500"><Flame size={14} />{s}</span>
                 <button className={iconBtn} aria-label={`Edit ${h.name}`} onClick={() => setEdit(h)}><Pencil size={15} /></button>
-                <button className={iconBtn} aria-label={`Delete ${h.name}`} onClick={() => window.confirm(`Delete "${h.name}"? Its history will be removed.`) && onDelete(h._id)}><Trash2 size={15} /></button>
+                <button className={iconBtn} aria-label={`Delete ${h.name}`} onClick={() => window.confirm(`Remove "${h.name}" from today onward? Past days keep their history.`) && onDelete(h._id)}><Trash2 size={15} /></button>
               </li>
             );
           })}
