@@ -21,6 +21,7 @@ import { CheckSquare, Wallet, Lightbulb, Utensils, Hourglass, BookOpen, BarChart
 import Notes from './components/Notes';
 import Expenses from './components/Expenses';
 import Report from './components/Report';
+import LifeIndex from './components/LifeIndex';
 // Re-check every minute so a new day automatically shows a fresh checklist.
 function useToday() {
   const [t, setT] = useState(key());
@@ -243,6 +244,7 @@ export default function App({ user, onLogout }) {
             ['nutrition', 'Nutrition', Utensils],
             ['time', 'Time Audit', Hourglass],
             ['report', 'Report', BarChart3],
+            ['life-index', 'Life Index', BarChart3],
             ['notes', 'Notes', BookOpen]
           ].map(([id, label, Icon]) => (
             <button
@@ -355,7 +357,9 @@ export default function App({ user, onLogout }) {
 
             )
 
-            :                tab === 'report' ? (
+            :                tab === 'life-index' ? (
+<LifeIndex habits={habits} days={days} today={today} />
+            ) : tab === 'report' ? (
 <Report habits={habits} days={days} today={today} />            ) :                tab === 'nutrition' ? (
               <Nutrition today={today} />
             ) : tab === 'notes' ? (

@@ -50,6 +50,15 @@ export default function TaskReport({ habits, days, today }) {
             </div>
           )}
           <div>
+            <p className="mb-2 text-sm font-medium">Daily mood and task status</p>
+            <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="bg-zinc-50 text-xs text-zinc-500 dark:bg-zinc-800/60"><tr><th className="p-3">Date</th><th className="p-3">Mood</th><th className="p-3">Completed</th><th className="p-3">Pending</th></tr></thead>
+                <tbody>{rep.rows.map((r) => <tr key={r.d} className="border-t border-zinc-100 dark:border-zinc-800"><td className="p-3">{fmt(r.d)}</td><td className="p-3">{r.mood || <span className="text-zinc-400">Not recorded</span>}</td><td className="p-3 text-emerald-600">{r.done.length}</td><td className="p-3 text-rose-500">{r.pending.length}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+          <div>
             <p className="mb-2 text-sm font-medium">By task</p>
             <ul className="space-y-3">
               {[...rep.tasks].sort((a, b) => b.pending - a.pending).map((t) => (
@@ -64,7 +73,7 @@ export default function TaskReport({ habits, days, today }) {
             <button className={btnP} onClick={() => run(printTaskReport)}><FileDown size={16} />PDF</button>
             <button className={btn} onClick={() => run(downloadTaskCsv)}><FileSpreadsheet size={16} />Excel (CSV)</button>
           </div>
-          <p className="text-xs text-zinc-400">Counted from {fmt(rep.from)} to {fmt(rep.to)}. Weekly tasks are not included.</p>
+          <p className="text-xs text-zinc-400">Counted from {fmt(rep.from)} to {fmt(rep.to)}. Weekly habits are excluded. One-time tasks stay pending until completed and count once in the summary. Mood is shown when recorded.</p>
         </div>
       )}
     </Card>

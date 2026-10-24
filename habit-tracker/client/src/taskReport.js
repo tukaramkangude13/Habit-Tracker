@@ -4,37 +4,68 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const q = (c) => `"${String(c ?? '').replace(/"/g, '""')}"`;
 const short = (d) => fmt(d, { month: 'short', day: 'numeric' });
 
-// Tasks (habits) that were due on a date. Weekly habits are not counted here, same as the main report.
+// Recurring tasks are due on each applicable date. One-time tasks remain pending
+// until their first check-off, then are completed once and no longer appear as pending.
 const dueOn = (d, habits) => {
   const dow = parse(d).getDay();
-  return habits.filter((h) => h.frequency !== 'weekly' && (!h.createdAt || key(new Date(h.createdAt)) <= d) && (!h.archivedOn || d < h.archivedOn)
+  return habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && (!h.createdAt || key(new Date(h.createdAt)) <= d) && (!h.archivedOn || d < h.archivedOn)
     && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
 };
 
-// For each day in the range: which tasks were completed and which are pending.
-// Days before your first saved record are not counted. A later day with no record means nothing was done, so every task is pending.
 export function buildTaskReport(habits, days, today, from, to) {
   const first = Object.keys(days).sort()[0];
   const a = first && first > from ? first : from;
   const z = to > today ? today : to;
   const rows = [], byTask = new Map();
+  const onceHabits = habits.filter((h) => h.frequency === 'once');
+  const onceDoneDate = new Map();
+  onceHabits.forEach((h) => {
+    const completed = Object.keys(days).filter((d) => d >= (h.createdAt ? key(new Date(h.createdAt)) : from) && days[d]?.done?.includes(h._id)).sort()[0];
+    if (completed) onceDoneDate.set(h._id, completed);
+  });
   if (first && a <= z) {
     for (let d = parse(a); key(d) <= z; d = addDays(d, 1)) {
       const k = key(d), done = [], pending = [];
       dueOn(k, habits).forEach((h) => {
-        const t = byTask.get(h._id) || { name: h.name, done: 0, pending: 0 };
+        const t = byTask.get(h._id) || { name: h.name, done: 0, pending: 0, frequency: h.frequency };
         if (days[k]?.done?.includes(h._id)) { done.push(h.name); t.done++; } else { pending.push(h.name); t.pending++; }
         byTask.set(h._id, t);
       });
-      if (done.length || pending.length) rows.push({ d: k, done, pending });
+      onceHabits.forEach((h) => {
+        const created = h.createdAt ? key(new Date(h.createdAt)) : from;
+        if (k < created || (h.archivedOn && k >= h.archivedOn)) return;
+        const completedOn = onceDoneDate.get(h._id);
+        if (completedOn && k > completedOn) return;
+        const t = byTask.get(h._id) || { name: h.name, done: 0, pending: 0, frequency: 'once' };
+        if (completedOn === k) { done.push(h.name); t.done = 1; t.pending = 0; }
+        else { pending.push(h.name); if (!completedOn) { t.pending = 1; t.done = 0; } }
+        byTask.set(h._id, t);
+      });
+      if (done.length || pending.length) rows.push({ d: k, done, pending, mood: days[k]?.mood || null });
     }
   }
-  const completed = rows.reduce((s, r) => s + r.done.length, 0), pending = rows.reduce((s, r) => s + r.pending.length, 0);
+  // Totals/by-task count each one-time task once; recurring tasks count each due day.
+  const recurring = [...byTask.values()].filter((t) => t.frequency !== 'once');
+  const once = [...byTask.values()].filter((t) => t.frequency === 'once');
+  const completed = recurring.reduce((s, t) => s + t.done, 0) + once.reduce((s, t) => s + (t.done ? 1 : 0), 0);
+  const pending = recurring.reduce((s, t) => s + t.pending, 0) + once.reduce((s, t) => s + (t.done ? 0 : (t.pending ? 1 : 0)), 0);
+  const tasks = [...byTask.values()].map((t) => {
+    let done = t.done, pending = t.pending;
+    if (t.frequency === 'once') {
+      const h = onceHabits.find((item) => item.name === t.name);
+      const completedOn = h ? onceDoneDate.get(h._id) : null;
+      done = completedOn && completedOn >= a && completedOn <= z ? 1 : 0;
+      pending = !completedOn || completedOn > z ? 1 : 0;
+      if (completedOn && completedOn < a) pending = 0;
+    }
+    const due = done + pending;
+    return { name: t.name, frequency: t.frequency, done, pending, due, pct: due ? Math.round(done / due * 100) : 0 };
+  }).filter((t) => t.due > 0);
   return {
     from: a, to: z, rows, completed, pending,
     rate: completed + pending ? Math.round((completed / (completed + pending)) * 100) : null,
     perfect: rows.filter((r) => !r.pending.length).length,
-    tasks: [...byTask.values()].map((t) => ({ ...t, due: t.done + t.pending, pct: Math.round((t.done / (t.done + t.pending)) * 100) })),
+    tasks,
   };
 }
 
@@ -42,10 +73,10 @@ export function downloadTaskCsv(rep) {
   if (!rep.rows.length) throw new Error('No tracked days in this range.');
   const L = [
     [`Task report ${rep.from} to ${rep.to}`],
-    ['Date', 'Weekday', 'Task', 'Status'],
-    ...rep.rows.flatMap((r) => [...r.done.map((n) => [r.d, fmt(r.d, { weekday: 'short' }), n, 'Completed']), ...r.pending.map((n) => [r.d, fmt(r.d, { weekday: 'short' }), n, 'Pending'])]),
-    [], ['Summary by task'], ['Task', 'Completed days', 'Pending days', 'Completion %'],
-    ...rep.tasks.map((t) => [t.name, t.done, t.pending, t.pct]),
+    ['Date', 'Weekday', 'Mood', 'Task', 'Status'],
+    ...rep.rows.flatMap((r) => [...r.done.map((n) => [r.d, fmt(r.d, { weekday: 'short' }), r.mood || 'Not recorded', n, 'Completed']), ...r.pending.map((n) => [r.d, fmt(r.d, { weekday: 'short' }), r.mood || 'Not recorded', n, 'Pending'])]),
+    [], ['Summary by task'], ['Task', 'Type', 'Completed', 'Pending', 'Completion %'],
+    ...rep.tasks.map((t) => [t.name, t.frequency === 'once' ? 'One-time' : t.frequency, t.done, t.pending, t.pct]),
     [], ['Total', rep.completed, rep.pending, rep.rate === null ? '' : rep.rate],
   ];
   const el = document.createElement('a');
@@ -59,10 +90,10 @@ export function printTaskReport(rep, today) {
   if (!rep.rows.length) throw new Error('No tracked days in this range.');
   const chips = (list, cls, mark) => (list.length ? list.map((n) => `<span class="chip ${cls}">${mark} ${esc(n)}</span>`).join('') : '<span class="none">-</span>');
   const kpi = (l, v, s) => `<div class="kpi"><small>${l}</small><b>${v}</b><span>${s}</span></div>`;
-  const tasks = [...rep.tasks].sort((x, y) => y.pending - x.pending).map((t) => `<tr><td class="l">${esc(t.name)}</td><td class="g">${t.done}</td><td class="r">${t.pending}</td>
+  const tasks = [...rep.tasks].sort((x, y) => y.pending - x.pending).map((t) => `<tr><td class="l">${esc(t.name)}</td><td>${t.frequency === 'once' ? 'One-time' : esc(t.frequency)}</td><td class="g">${t.done}</td><td class="r">${t.pending}</td>
 <td class="l nw"><span class="bar"><i style="width:${t.pct}%"></i></span> ${t.pct}%</td></tr>`).join('');
   const days = rep.rows.map((r) => `<tr class="${r.d === today ? 'today' : ''}"><td class="l nw"><b>${esc(fmt(r.d, { weekday: 'short' }))}</b> ${esc(short(r.d))}${r.d === today ? '<br><small>today</small>' : ''}</td>
-<td>${r.done.length}/${r.done.length + r.pending.length}</td><td class="l">${chips(r.done, 'ok', '&#10003;')}</td><td class="l">${chips(r.pending, 'no', '&#9675;')}</td></tr>`).join('');
+<td>${esc(r.mood || '—')}</td><td>${r.done.length}/${r.done.length + r.pending.length}</td><td class="l">${chips(r.done, 'ok', '&#10003;')}</td><td class="l">${chips(r.pending, 'no', '&#9675;')}</td></tr>`).join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Task report ${esc(rep.from)} to ${esc(rep.to)}</title><style>
 @page{size:A4;margin:11mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{font-family:system-ui,Segoe UI,sans-serif;color:#18181b;margin:0;font-size:11px;line-height:1.45}
@@ -81,10 +112,10 @@ tr.today td{background:#eef2ff}thead{display:table-header-group}tr{page-break-in
 <div class="kpis">${kpi('Completed', rep.completed, 'task check-offs')}${kpi('Pending', rep.pending, 'not done')}${kpi('Completion', rep.rate === null ? '-' : rep.rate + '%', 'of all due tasks')}${kpi('Perfect days', rep.perfect, 'every task done')}</div>
 <p class="leg"><span class="chip ok">&#10003; completed</span> <span class="chip no">&#9675; pending</span></p>
 <h2>By task (most pending first)</h2>
-<table><thead><tr><th>Task</th><th>Completed</th><th>Pending</th><th>Completion</th></tr></thead><tbody>${tasks}</tbody></table>
+<table><thead><tr><th>Task</th><th>Type</th><th>Completed</th><th>Pending</th><th>Completion</th></tr></thead><tbody>${tasks}</tbody></table>
 <h2>Day by day</h2>
-<table class="days"><colgroup><col class="d"><col class="n"><col><col></colgroup><thead><tr><th>Date</th><th>Done</th><th>Completed tasks</th><th>Pending tasks</th></tr></thead><tbody>${days}</tbody></table>
-<p class="foot">Days before your first saved record are not counted. Weekly tasks are not included. A task counts only on days after it was created and before it was deleted.</p>
+<table class="days"><colgroup><col class="d"><col class="n"><col class="n"><col><col></colgroup><thead><tr><th>Date</th><th>Mood</th><th>Done</th><th>Completed tasks</th><th>Pending tasks</th></tr></thead><tbody>${days}</tbody></table>
+<p class="foot">Days before your first saved record are not counted. Weekly habits are not included. One-time tasks stay pending until completed and count once in the summary. Mood is shown only when recorded.</p>
 </body></html>`;
   const w = window.open('', '_blank');
   if (!w) throw new Error('Allow pop-ups for this site to download the PDF.');

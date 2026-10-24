@@ -42,7 +42,7 @@ const FOOD_GROUPS = [
 const dayRate = (d, habits, days) => {
   if (!days[d]) return null;
   const dow = parse(d).getDay();
-  const due = habits.filter((h) => h.frequency !== 'weekly' && key(new Date(h.createdAt)) <= d && (!h.archivedOn || d < h.archivedOn) && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
+  const due = habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && key(new Date(h.createdAt)) <= d && (!h.archivedOn || d < h.archivedOn) && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
   if (!due.length) return null;
   const done = due.filter((h) => days[d].done?.includes(h._id)).length;
   return { done, due: due.length };

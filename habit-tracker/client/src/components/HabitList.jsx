@@ -28,7 +28,7 @@ function HabitModal({ habit, onClose, onSave }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="Frequency">
           <select className={inp} value={f.frequency} onChange={set('frequency')}>
-            <option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly</option>
+            <option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly</option><option value="once">One-time task</option>
           </select>
         </Field>
         <Field label="Reminder (optional)"><input type="time" className={inp} value={f.reminder} onChange={set('reminder')} /></Field>
