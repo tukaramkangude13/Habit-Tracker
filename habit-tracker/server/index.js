@@ -83,7 +83,7 @@ const seed = [['Workout', 'dumbbell'], ['Coding', 'code'], ['DSA Practice', 'bra
 
 const wrap = (fn) => async (req, res) => {
   try { res.json(await fn(req, res)); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  catch (e) { res.status(e.statusCode || 400).json({ error: e.message }); }
 };
 
 // ---------- Auth ----------
@@ -268,6 +268,135 @@ app.put('/api/nutrition/profile', wrap((req) =>
 app.get('/api/weights', wrap((req) => WeightLog.find({ userId: req.userId }).sort('date')));
 app.put('/api/weights/:date', wrap((req) =>
   WeightLog.findOneAndUpdate({ userId: req.userId, date: req.params.date }, { kg: Number(req.body.kg) }, { upsert: true, new: true, runValidators: true })));
+app.post('/api/ai/progress-analysis', wrap(async (req) => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const error = new Error('AI analysis is not configured. Add OPENAI_API_KEY to server/.env and restart the server.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const now = new Date();
+  const to = now.toISOString().slice(0, 10);
+  const fromDate = new Date(now);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 29);
+  const from = fromDate.toISOString().slice(0, 10);
+  const [habits, days, reflections] = await Promise.all([
+    Habit.find({ userId: req.userId }).select('name frequency createdAt archivedOn').lean(),
+    Day.find({ userId: req.userId, date: { $gte: from, $lte: to } }).select('date done mood sleep').lean(),
+    Reflection.find({ userId: req.userId, date: { $gte: from, $lte: to } }).select('date trigger category hour').lean(),
+  ]);
+
+  if (!habits.length) {
+    const error = new Error('Create at least one habit before requesting an AI progress analysis.');
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const dayMap = Object.fromEntries(days.map((d) => [d.date, d]));
+  const dayKeys = [];
+  for (let d = new Date(`${from}T00:00:00.000Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
+    dayKeys.push(d.toISOString().slice(0, 10));
+  }
+  const applies = (h, date) => {
+    const created = h.createdAt ? new Date(h.createdAt).toISOString().slice(0, 10) : from;
+    if (date < created || (h.archivedOn && date >= h.archivedOn)) return false;
+    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    return h.frequency !== 'weekdays' || (weekday !== 0 && weekday !== 6);
+  };
+
+  const daily = dayKeys.map((date) => {
+    const due = habits.filter((h) => h.frequency !== 'weekly' && applies(h, date));
+    const doneIds = new Set((dayMap[date]?.done || []).map(String));
+    const hit = due.filter((h) => doneIds.has(String(h._id))).length;
+    return {
+      date,
+      completionPercent: due.length ? Math.round((hit / due.length) * 100) : null,
+      completed: hit,
+      due: due.length,
+      mood: dayMap[date]?.mood || null,
+      sleepHours: dayMap[date]?.sleep ?? null,
+    };
+  });
+
+  const habitPerformance = habits.map((h) => {
+    const start = h.createdAt ? new Date(h.createdAt).toISOString().slice(0, 10) : from;
+    const relevant = dayKeys.filter((date) => date >= start && applies(h, date));
+    const doneIds = (date) => new Set((dayMap[date]?.done || []).map(String));
+    if (h.frequency === 'weekly') {
+      const weeks = new Map();
+      relevant.forEach((date) => {
+        const d = new Date(`${date}T00:00:00.000Z`);
+        d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+        const week = d.toISOString().slice(0, 10);
+        weeks.set(week, (weeks.get(week) || false) || doneIds(date).has(String(h._id)));
+      });
+      const hit = [...weeks.values()].filter(Boolean).length;
+      return { name: h.name, frequency: h.frequency, completed: hit, opportunities: weeks.size, completionPercent: weeks.size ? Math.round(hit / weeks.size * 100) : null };
+    }
+    const hit = relevant.filter((date) => doneIds(date).has(String(h._id))).length;
+    return { name: h.name, frequency: h.frequency, completed: hit, opportunities: relevant.length, completionPercent: relevant.length ? Math.round(hit / relevant.length * 100) : null };
+  });
+
+  const validDays = daily.filter((d) => d.completionPercent !== null);
+  const average = (values) => values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
+  const sleepGroups = { under7: [], sevenOrMore: [] };
+  validDays.forEach((d) => {
+    if (d.sleepHours == null) return;
+    (d.sleepHours < 7 ? sleepGroups.under7 : sleepGroups.sevenOrMore).push(d.completionPercent);
+  });
+  const moodGroups = { positive: [], low: [] };
+  validDays.forEach((d) => {
+    if (['great', 'good'].includes(d.mood)) moodGroups.positive.push(d.completionPercent);
+    if (['low', 'bad'].includes(d.mood)) moodGroups.low.push(d.completionPercent);
+  });
+  const counts = (values) => values.reduce((out, value) => { const k = value || 'Other'; out[k] = (out[k] || 0) + 1; return out; }, {});
+  const weekly = [];
+  for (let i = 0; i < validDays.length; i += 7) {
+    const chunk = validDays.slice(i, i + 7);
+    if (chunk.length) weekly.push({ from: chunk[0].date, to: chunk[chunk.length - 1].date, averageCompletionPercent: average(chunk.map((d) => d.completionPercent)), daysTracked: chunk.length });
+  }
+
+  const evidence = {
+    period: { from, to },
+    trackedDays: validDays.length,
+    averageDailyCompletionPercent: average(validDays.map((d) => d.completionPercent)),
+    dailyCompletionByDate: daily,
+    habitPerformance,
+    weeklyTrend: weekly,
+    sleepComparison: { under7HoursAverageCompletionPercent: average(sleepGroups.under7), under7HoursDays: sleepGroups.under7.length, sevenOrMoreHoursAverageCompletionPercent: average(sleepGroups.sevenOrMore), sevenOrMoreHoursDays: sleepGroups.sevenOrMore.length },
+    moodComparison: { positiveMoodAverageCompletionPercent: average(moodGroups.positive), positiveMoodDays: moodGroups.positive.length, lowMoodAverageCompletionPercent: average(moodGroups.low), lowMoodDays: moodGroups.low.length },
+    reflectionCount: reflections.length,
+    reflectionTriggers: counts(reflections.map((r) => r.trigger)),
+    reflectionCategories: counts(reflections.map((r) => r.category)),
+  };
+
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: 'You are a careful habit-progress analyst. Analyze only the supplied aggregate data. Do not claim correlation proves causation. Do not invent missing evidence. If data is sparse, say so. Return valid JSON with keys: summary (string), patterns (array of objects with title, evidence, recommendation, confidence where confidence is low/moderate/high), and nextWeekPlan (array of 3 short actionable strings). Be supportive but direct. Avoid medical diagnoses.' },
+        { role: 'user', content: `Analyze this user's habit progress for ${from} through ${to}. Provide evidence-based observations and small practical actions. Data:\n${JSON.stringify(evidence)}` },
+      ],
+    }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error('[ai] OpenAI request failed:', response.status, result.error?.message || 'Unknown error');
+    const error = new Error(response.status === 429 ? 'AI usage limit reached. Please try again later.' : 'The AI analysis request failed. Check the server configuration and try again.');
+    error.statusCode = response.status === 429 ? 429 : 502;
+    throw error;
+  }
+  let analysis;
+  try { analysis = JSON.parse(result.choices?.[0]?.message?.content || '{}'); }
+  catch { throw new Error('AI returned an invalid analysis. Please try again.'); }
+  return { period: { from, to }, trackedDays: validDays.length, analysis };
+}));
 app.get('/api/days', wrap((req) => Day.find({ userId: req.userId })));
 app.put('/api/days/:date', wrap((req) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) throw new Error('Invalid date');

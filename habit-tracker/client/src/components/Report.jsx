@@ -8,6 +8,7 @@ import { downloadReportCsv, printReport } from '../reportExport';
 import { Card, btn, btnP } from './ui';
    import TaskReport from './TaskReport';
    import NutritionReport from './NutritionReport';
+import AIProgressAnalyzer from './AIProgressAnalyzer';
 const FOLLOW = 0.9; // a day "follows the plan" at 90% or more of both the calorie and the protein target
 
 const MOODS = { great: ['😄', 4], good: ['🙂', 3], okay: ['😐', 2], low: ['😔', 1], bad: ['😫', 0] };
@@ -234,6 +235,40 @@ export default function Report({ habits, days, today }) {
           </div>
 
           {analysis.map((a) => <Compare key={a.title} a={a} />)}
+          <AIProgressAnalyzer />
+          <Card title="Daily review">
+            <p className="mb-3 text-sm text-zinc-500">A day-by-day view of habit completion, mood, nutrition, screen time, sleep, and your note about what you did. Missing values mean that data was not logged.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800">
+                    <th className="px-2 py-2 font-medium">Date</th>
+                    <th className="px-2 py-2 font-medium">Tasks</th>
+                    <th className="px-2 py-2 font-medium">Mood</th>
+                    <th className="px-2 py-2 font-medium">Sleep</th>
+                    <th className="px-2 py-2 font-medium">Calories</th>
+                    <th className="px-2 py-2 font-medium">Protein</th>
+                    <th className="px-2 py-2 font-medium">Screen time</th>
+                    <th className="px-2 py-2 font-medium">What I did / daily note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...rows].reverse().map((r) => (
+                    <tr key={r.d} className="border-b border-zinc-100 align-top dark:border-zinc-800">
+                      <td className="whitespace-nowrap px-2 py-2">{fmt(r.d, { month: 'short', day: 'numeric' })}</td>
+                      <td className="px-2 py-2">{r.rate === null ? '—' : `${Math.round(r.rate)}% (${r.done}/${r.due})`}</td>
+                      <td className="px-2 py-2">{r.mood ? `${MOODS[r.mood][0]} ${r.mood}` : '—'}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{r.sleep === null ? '—' : `${r.sleep}h`}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{r.kcal === null ? '—' : Math.round(r.kcal).toLocaleString()}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{r.protein === null ? '—' : `${Math.round(r.protein)} g`}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{r.screen === null ? '—' : hm(r.screen)}</td>
+                      <td className="max-w-[260px] px-2 py-2 text-zinc-600 dark:text-zinc-300">{r.note ? r.note : <span className="text-zinc-400">Not recorded</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
           <p className="px-1 text-xs text-zinc-500">These are patterns, not causes. Low mood might make you waste time, or wasting time might lower your mood. The tables only show what tends to happen together.</p>
         </>
       )}
