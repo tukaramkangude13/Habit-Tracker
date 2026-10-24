@@ -281,10 +281,16 @@ app.post('/api/ai/progress-analysis', wrap(async (req) => {
   const fromDate = new Date(now);
   fromDate.setUTCDate(fromDate.getUTCDate() - 29);
   const from = fromDate.toISOString().slice(0, 10);
-  const [habits, days, reflections] = await Promise.all([
+  const range = { userId: req.userId, date: { $gte: from, $lte: to } };
+  const [habits, days, reflections, screenRows, foodRows, expenses, timeLogs, nutritionProfile] = await Promise.all([
     Habit.find({ userId: req.userId }).select('name frequency createdAt archivedOn').lean(),
-    Day.find({ userId: req.userId, date: { $gte: from, $lte: to } }).select('date done mood sleep').lean(),
-    Reflection.find({ userId: req.userId, date: { $gte: from, $lte: to } }).select('date trigger category hour').lean(),
+    Day.find(range).select('date done mood sleep note').lean(),
+    Reflection.find(range).select('date trigger category hour what next').lean(),
+    ScreenTime.find(range).select('date totalMinutes apps').lean(),
+    FoodLog.find(range).select('date kcal protein').lean(),
+    Expense.find(range).select('date amount category').lean(),
+    TimeLog.find(range).select('date minutes category').lean(),
+    NutritionProfile.findOne({ userId: req.userId }).select('target weight').lean(),
   ]);
 
   if (!habits.length) {
@@ -294,6 +300,22 @@ app.post('/api/ai/progress-analysis', wrap(async (req) => {
   }
 
   const dayMap = Object.fromEntries(days.map((d) => [d.date, d]));
+  const byDate = () => ({});
+  const nutritionByDate = byDate();
+  foodRows.forEach((f) => {
+    const row = nutritionByDate[f.date] ||= { kcal: 0, protein: 0, entries: 0 };
+    row.kcal += Number(f.kcal) || 0;
+    row.protein += Number(f.protein) || 0;
+    row.entries += 1;
+  });
+  const screenByDate = Object.fromEntries(screenRows.map((r) => [r.date, {
+    totalMinutes: Number(r.totalMinutes) || 0,
+    topApps: [...(r.apps || [])].sort((a, b) => (b.minutes || 0) - (a.minutes || 0)).slice(0, 3).map(a => ({ name: a.name, minutes: a.minutes })),
+  }]));
+  const spendByDate = {};
+  expenses.forEach(e => { spendByDate[e.date] = (spendByDate[e.date] || 0) + (Number(e.amount) || 0); });
+  const manualTimeByDate = {};
+  timeLogs.forEach(t => { manualTimeByDate[t.date] = (manualTimeByDate[t.date] || 0) + (Number(t.minutes) || 0); });
   const dayKeys = [];
   for (let d = new Date(`${from}T00:00:00.000Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
     dayKeys.push(d.toISOString().slice(0, 10));
@@ -316,6 +338,17 @@ app.post('/api/ai/progress-analysis', wrap(async (req) => {
       due: due.length,
       mood: dayMap[date]?.mood || null,
       sleepHours: dayMap[date]?.sleep ?? null,
+      phoneMinutes: screenByDate[date]?.totalMinutes ?? null,
+      topPhoneApps: screenByDate[date]?.topApps ?? [],
+      calories: nutritionByDate[date]?.kcal ?? null,
+      proteinGrams: nutritionByDate[date]?.protein ?? null,
+      foodEntries: nutritionByDate[date]?.entries ?? 0,
+      spending: spendByDate[date] ?? null,
+      manualTimeMinutes: manualTimeByDate[date] ?? null,
+      reflectionTriggers: reflections.filter(r => r.date === date).map(r => r.trigger).filter(Boolean),
+      reflectionCategories: reflections.filter(r => r.date === date).map(r => r.category).filter(Boolean),
+      reflectionNotes: reflections.filter(r => r.date === date).map(r => ({ what: r.what, next: r.next })),
+      dailyNote: dayMap[date]?.note || '',
     };
   });
 
@@ -369,6 +402,19 @@ app.post('/api/ai/progress-analysis', wrap(async (req) => {
     reflectionCount: reflections.length,
     reflectionTriggers: counts(reflections.map((r) => r.trigger)),
     reflectionCategories: counts(reflections.map((r) => r.category)),
+    screenTime: {
+      daysWithData: screenRows.length,
+      averageMinutesOnRecordedDays: screenRows.length ? Math.round(screenRows.reduce((s, r) => s + (Number(r.totalMinutes) || 0), 0) / screenRows.length) : null,
+      mostUsedApps: Object.entries(screenRows.reduce((out, row) => { (row.apps || []).forEach(app => { out[app.name] = (out[app.name] || 0) + (Number(app.minutes) || 0); }); return out; }, {})).sort((a,b) => b[1]-a[1]).slice(0, 5).map(([name, minutes]) => ({ name, minutes })),
+    },
+    nutrition: {
+      daysWithFoodLogged: Object.keys(nutritionByDate).length,
+      averageCaloriesOnLoggedDays: Object.keys(nutritionByDate).length ? Math.round(Object.values(nutritionByDate).reduce((s, r) => s + r.kcal, 0) / Object.keys(nutritionByDate).length) : null,
+      averageProteinGramsOnLoggedDays: Object.keys(nutritionByDate).length ? Math.round(Object.values(nutritionByDate).reduce((s, r) => s + r.protein, 0) / Object.keys(nutritionByDate).length) : null,
+      configuredTargetCalories: nutritionProfile?.target ?? null,
+    },
+    spending: { total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0), entries: expenses.length, categories: counts(expenses.map(e => e.category)) },
+    manualTime: { totalMinutes: timeLogs.reduce((s, t) => s + (Number(t.minutes) || 0), 0), entries: timeLogs.length, categories: counts(timeLogs.map(t => t.category)) },
   };
 
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -380,8 +426,8 @@ app.post('/api/ai/progress-analysis', wrap(async (req) => {
       response_format: { type: 'json_object' },
       temperature: 0.3,
       messages: [
-        { role: 'system', content: 'You are a careful habit-progress analyst. Analyze only the supplied aggregate data. Do not claim correlation proves causation. Do not invent missing evidence. If data is sparse, say so. Return valid JSON with keys: summary (string), patterns (array of objects with title, evidence, recommendation, confidence where confidence is low/moderate/high), and nextWeekPlan (array of 3 short actionable strings). Be supportive but direct. Avoid medical diagnoses.' },
-        { role: 'user', content: `Analyze this user's habit progress for ${from} through ${to}. Provide evidence-based observations and small practical actions. Data:\n${JSON.stringify(evidence)}` },
+        { role: 'system', content: 'You are a careful habit-progress analyst. Analyze only the supplied data. Connect daily habits, mood, sleep, actual Android screen time and top apps, nutrition, spending, manual time logs, and reflection triggers/notes when the same-date evidence supports a connection. Do not claim correlation proves causation. Do not invent missing evidence or treat missing data as zero. If data is sparse, say so. Include a plain-language explanation of what happened, evidence, confidence, limitations, and a practical recommendation in each pattern. Return valid JSON with keys: summary (string), patterns (array of objects with title, evidence, recommendation, confidence where confidence is low/moderate/high), and nextWeekPlan (array of 3 short actionable strings). Be supportive but direct. Avoid medical diagnoses.' },
+        { role: 'user', content: `Analyze this user's habit progress for ${from} through ${to}. Provide a clear, user-friendly progress report. Prioritize meaningful connections across daily records. State sample sizes, explain missing data, and give three actionable next-week steps. Data:\n${JSON.stringify(evidence)}` },
       ],
     }),
   });
