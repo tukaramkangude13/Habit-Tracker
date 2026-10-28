@@ -33,7 +33,7 @@ export default function AuthPage({ onAuth }) {
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-600 text-white"><Target size={20} /></span>
           <span className="text-lg font-semibold">Habit & Goal Tracker</span>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
           <h1 className="text-xl font-semibold">{signup ? 'Create your account' : 'Welcome back'}</h1>
           <p className="mb-5 text-sm text-zinc-500">{signup ? 'Start tracking your habits, goals and expenses.' : 'Log in to continue.'}</p>
           <form onSubmit={submit} className="space-y-3" noValidate>

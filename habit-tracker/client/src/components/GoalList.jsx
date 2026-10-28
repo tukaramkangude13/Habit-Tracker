@@ -84,7 +84,7 @@ export default function GoalList({ goals, onSave, onDelete, onPatch }) {
   const [edit, setEdit] = useState(null);
   return (
     <Card title="My Goals" action={<button className={btnP} onClick={() => setEdit(blank())}><Plus size={16} />Add Goal</button>}>
-      {goals.length === 0 ? <p className="py-8 text-center text-sm text-zinc-500">No goals yet. Add one with a target and a deadline.</p> : (
+      {goals.length === 0 ? <p className="py-5 text-center text-sm text-zinc-500">No goals yet. Add one with a target and a deadline.</p> : (
         <ul className="grid gap-3 md:grid-cols-2">{goals.map((g) => <GoalCard key={g._id} g={g} onEdit={setEdit} onDelete={onDelete} onPatch={onPatch} />)}</ul>
       )}
       {edit && <GoalModal goal={edit} onClose={() => setEdit(null)} onSave={onSave} />}

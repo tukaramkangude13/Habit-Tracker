@@ -60,10 +60,10 @@ export default function TimeAudit({ today }) {
   const diff = st.thisW - st.lastW;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5">
       {err && <p role="alert" className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600 dark:bg-red-500/10">{err}</p>}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           <Card title="Log time you wasted">
             <form onSubmit={add} className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -112,7 +112,7 @@ export default function TimeAudit({ today }) {
 
       <Card title="Where your time goes" action={<div className="flex gap-1">{[7, 30].map((d) => <button key={d} onClick={() => setRange(d)} className={`${btn} py-1 text-xs ${range === d ? on : ''}`}>{d} days</button>)}</div>}>
         {st.sum === 0 ? <p className="py-6 text-center text-sm text-zinc-500">Nothing logged in the last {range} days. Log honestly and the picture builds up here.</p> : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <dl className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
               {[['Total', hm(st.sum)], ['Daily average', hm(st.avg)], ['Per year at this pace', `${Math.round((st.avg * 365) / 60)} hours`], ['Full days per year', (st.avg * 365 / 1440).toFixed(1)]].map(([l, v]) => (
                 <div key={l} className="rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/50"><dd className="text-lg font-semibold">{v}</dd><dt className="text-xs text-zinc-500">{l}</dt></div>

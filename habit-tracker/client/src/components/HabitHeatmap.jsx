@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { fmt, key, parse, pct } from '../lib';
+import { fmt, habitsOn, key, parse, pct } from '../lib';
 import { Card, iconBtn } from './ui';
 
 const LEVELS = ['bg-zinc-100 dark:bg-zinc-800', 'bg-indigo-100 dark:bg-indigo-950', 'bg-indigo-200 dark:bg-indigo-900',
@@ -23,7 +23,7 @@ export default function HabitHeatmap({ habits, days, today }) {
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="text-center text-[10px] text-zinc-400">{d}</span>)}
         {cells.map((k, i) => {
           if (!k) return <span key={i} />;
-          const p = k > today ? 0 : pct(days[k], habits);
+          const p = k > today ? 0 : pct(days[k], habitsOn(habits, k));
           return <div key={k} title={`${fmt(k)} - ${p}% completed`} className={`aspect-square rounded-md ${LEVELS[level(p)]} ${k === today ? 'ring-2 ring-indigo-600 ring-offset-1 dark:ring-offset-zinc-900' : ''}`} />;
         })}
       </div>

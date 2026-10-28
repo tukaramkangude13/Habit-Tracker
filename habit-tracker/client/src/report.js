@@ -1,4 +1,4 @@
-import { key, pct } from './lib';
+import { habitAppliesOn, key } from './lib';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hm = (m) => { m = Math.round(m); const h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };
@@ -6,8 +6,12 @@ const hm = (m) => { m = Math.round(m); const h = Math.floor(m / 60); return h ? 
 // time = { logs: [...timelogs], limit: daily limit in minutes }
 function build(y, mo, habits, days, today, time = { logs: [], limit: 60 }) {
   const ks = Array.from({ length: new Date(y, mo + 1, 0).getDate() }, (_, i) => key(new Date(y, mo, i + 1)));
-  const rows = habits.map((h) => ({ h, cells: ks.map((k) => (k > today ? null : !!days[k]?.done?.includes(h._id))) }));
-  const daily = ks.map((k) => (k > today ? null : pct(days[k], habits)));
+  const rows = habits.map((h) => ({ h, cells: ks.map((k) => (k > today || !habitAppliesOn(h, k) ? null : !!days[k]?.done?.includes(h._id))) }));
+  const daily = ks.map((k) => {
+    if (k > today || !days[k]) return null;
+    const due = habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && habitAppliesOn(h, k));
+    return due.length ? Math.round(due.filter((h) => days[k].done?.includes(h._id)).length / due.length * 100) : null;
+  });
   const title = new Date(y, mo, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const stat = (r) => { const t = r.cells.filter((c) => c !== null).length, d = r.cells.filter(Boolean).length; return { d, p: t ? Math.round((d / t) * 100) : 0 }; };
 
@@ -50,7 +54,8 @@ export function printReport(y, mo, habits, days, today, time) {
   const { ks, rows, daily, title, stat, mins, total, avg, cats, limit } = build(y, mo, habits, days, today, time);
   const tracked = daily.filter((v) => v !== null).length;
   const done = rows.reduce((a, r) => a + stat(r).d, 0);
-  const overall = tracked && habits.length ? Math.round((done / (tracked * habits.length)) * 100) : 0;
+  const scheduled = rows.reduce((sum, row) => sum + row.cells.filter((cell) => cell !== null).length, 0);
+  const overall = scheduled ? Math.round((done / scheduled) * 100) : 0;
   const mark = (c) => (c === null ? '' : c ? '<b class="y">✓</b>' : '<b class="n">✗</b>');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Habit Report ${esc(title)}</title><style>
 @page{size:A4 landscape;margin:10mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}

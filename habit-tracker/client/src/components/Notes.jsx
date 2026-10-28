@@ -128,7 +128,7 @@ export default function Notes() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[16rem_1fr]">
+    <div className="grid gap-4 lg:grid-cols-[14rem_1fr]">
       <Card title="Topics" className="h-fit">
         <ul className="space-y-1">
           {[['All', notes.length], ...names].map(([n, c]) => (
@@ -155,7 +155,7 @@ export default function Notes() {
         {topic !== 'All' && subs(topic).length > 0 && (
           <div className="flex flex-wrap gap-1">{['All', ...subs(topic)].map((s) => <button key={s} onClick={() => setSub(s)} className={chip(sub === s)}>{s}</button>)}</div>
         )}
-        {shown.length === 0 ? <Card><p className="py-8 text-center text-sm text-zinc-500">No notes here yet. Tap New note to write one.</p></Card> : (
+        {shown.length === 0 ? <Card><p className="py-5 text-center text-sm text-zinc-500">No notes here yet. Tap New note to write one.</p></Card> : (
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map((n) => (
               <li key={n._id}>

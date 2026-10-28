@@ -37,11 +37,11 @@ export const goalPct = (g) => {
 // Due vs hit for one habit in a month. Daily: every day. Weekdays: Mon-Fri. Weekly: one hit per Mon-Sun week.
 // Only days from the habit's creation date up to today count.
 export const habitStats = (h, days, ks, today) => {
-  const start = key(new Date(h.createdAt));
+  const start = h.startDate || (h.createdAt ? key(new Date(h.createdAt)) : ks[0]);
   let due = 0, hit = 0;
   const weeks = {};
   for (const k of ks) {
-    if (k > today || k < start) continue;
+    if (k > today || k < start || (h.endDate && k > h.endDate) || (h.archivedOn && k >= h.archivedOn)) continue;
     const dow = parse(k).getDay();
     const done = !!days[k]?.done?.includes(h._id);
     if (h.frequency === 'weekly') {
@@ -55,4 +55,11 @@ export const habitStats = (h, days, ks, today) => {
 };
 // Habits that counted on a given date: already created, and not yet archived.
 export const habitsOn = (habits, d) =>
-  habits.filter((h) => key(new Date(h.createdAt)) <= d && (!h.archivedOn || d < h.archivedOn));
+  habits.filter((h) => habitAppliesOn(h, d));
+
+export const habitAppliesOn = (habit, date) => {
+  const created = habit.startDate || (habit.createdAt ? key(new Date(habit.createdAt)) : date);
+  if (date < created || (habit.endDate && date > habit.endDate) || (habit.archivedOn && date >= habit.archivedOn)) return false;
+  const weekday = parse(date).getDay();
+  return habit.frequency !== 'weekdays' || (weekday !== 0 && weekday !== 6);
+};

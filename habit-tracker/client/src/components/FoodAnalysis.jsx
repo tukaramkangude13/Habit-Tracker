@@ -32,12 +32,12 @@ export default function FoodAnalysis({ foods, today, target, onOpen }) {
   return (
     <Card title="Food analysis" action={<div className="flex gap-1">{[7, 30].map((d) => <button key={d} className={pill(n === d)} onClick={() => setN(d)}>{d} days</button>)}</div>}>
       {a.days === 0 ? <p className="py-6 text-center text-sm text-zinc-500">No food logged in the last {n} days. Log meals in the Daily diary and your patterns will show here.</p> : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <dl className={`grid grid-cols-2 gap-3 text-center ${target ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
             {stats.map(([l, v]) => <div key={l} className="rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/50"><dd className="text-lg font-semibold">{v}</dd><dt className="text-xs text-zinc-500">{l}</dt></div>)}
           </dl>
           <ul className="space-y-1.5 text-sm text-zinc-600 dark:text-zinc-300">{tips.map((t) => <li key={t}>{t}</li>)}</ul>
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-medium">What you eat most</h3>

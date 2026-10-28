@@ -56,8 +56,8 @@ export default function PhoneUsage({ today }) {
       {rows.length === 0 ? (
         <p className="py-4 text-center text-sm text-zinc-500">No phone data yet. Connect your phone using the steps below.</p>
       ) : (
-        <div className="space-y-8">
-          <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="min-w-0">
               <p className="text-3xl font-semibold">{t ? hm(t.totalMinutes) : '0m'}</p>
               <p className="mb-3 text-sm text-zinc-500">today, from your phone. 7-day average {hm(st.avg)}</p>
@@ -95,7 +95,7 @@ export default function PhoneUsage({ today }) {
                 <button className={iconBtn} aria-label="Next month" onClick={() => setM(m + 1)}><ChevronRight size={16} /></button>
               </div>
             </div>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
                 <div className="grid grid-cols-7 gap-1">
                   {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((x, i) => <span key={i} className="text-center text-[11px] text-zinc-400">{x}</span>)}

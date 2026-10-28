@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Download, FileDown, FileSpreadsheet } from 'lucide-react';
 import { api } from '../api';
-import { addDays, fmt, key, parse } from '../lib';
+import { addDays, fmt, habitAppliesOn, key, parse } from '../lib';
 import { plan } from '../nutrition';
 import { downloadBackup } from '../backup';
 import { downloadReportCsv, printReport } from '../reportExport';
@@ -41,8 +41,7 @@ const FOOD_GROUPS = [
 // Weekly habits are left out of the daily rate. A date with no saved day record is "not tracked" (null).
 const dayRate = (d, habits, days) => {
   if (!days[d]) return null;
-  const dow = parse(d).getDay();
-  const due = habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && key(new Date(h.createdAt)) <= d && (!h.archivedOn || d < h.archivedOn) && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
+  const due = habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && habitAppliesOn(h, d));
   if (!due.length) return null;
   const done = due.filter((h) => days[d].done?.includes(h._id)).length;
   return { done, due: due.length };
@@ -358,7 +357,7 @@ export default function Report({ habits, days, today }) {
   const followedDays = foodDays.filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5">
       <Card title="Report"
         action={<div className="flex flex-wrap justify-end gap-1">{[['month', 'This month'], [30, '30 days'], [90, '90 days'], ['custom', 'Custom range']].map(([v, l]) => (
           <button key={v} onClick={() => setSpan(v)} className={`rounded-full px-3 py-1 text-xs ${span === v ? 'bg-indigo-600 text-white' : 'bg-zinc-100 dark:bg-zinc-800'}`}>{l}</button>
@@ -391,19 +390,20 @@ export default function Report({ habits, days, today }) {
 
       {extra && (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
             <Kpi label="Habits done (avg)" value={avgOf('rate') === null ? '-' : M.rate.fmt(avgOf('rate'))} sub={`${col('rate').length} tracked days`} />
             <Kpi label="Sleep (avg)" value={avgOf('sleep') === null ? '-' : M.sleep.fmt(avgOf('sleep'))} sub={`${col('sleep').length} nights logged`} />
             <Kpi label="Time wasted" value={col('wasted').length ? hm(wastedTotal) : '-'} sub={col('wasted').length ? `${hm(wastedTotal / col('wasted').length)} per logged day · ${col('wasted').length} logged` : 'nothing logged'} />
+            <Kpi label="Phone time (avg)" value={avgOf('screen') === null ? '-' : hm(avgOf('screen'))} sub={`${col('screen').length} days recorded`} />
+            <Kpi label="Spending (avg)" value={avgOf('spend') === null ? '-' : Math.round(avgOf('spend')).toLocaleString()} sub={`${col('spend').length} days with expenses`} />
             <Kpi label="Average mood" value={moodAvg === null ? '-' : `${moodEmoji} ${moodAvg.toFixed(1)}`} sub={`${col('moodScore').length} days with mood`} />
             <Kpi label="Nutrition plan" value={foodDays.length ? `${followedDays} / ${foodDays.length} days` : '-'} sub={goal ? (foodDays.length ? 'days you followed it' : 'no food logged') : 'set up a plan first'} />
           </div>
 
           {analysis.map((a) => <Compare key={a.title} a={{ ...a, title: `${a.title} · ${label}` }} />)}
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">AI analysis currently uses its own rolling 30-day window; the selected report date range applies to the statistics and downloads below, not yet to the AI response.</div>
-          <AIProgressAnalyzer />
+          <AIProgressAnalyzer habits={habits} days={days} today={today} />
           <Card title="Daily review">
-            <p className="mb-3 text-sm text-zinc-500">A day-by-day view of habit completion, mood, nutrition, screen time, sleep, and your note about what you did. Missing values mean that data was not logged.</p>
+            <p className="mb-3 text-sm text-zinc-500">A day-by-day view of habits, mood, sleep, food, phone use, spending, and time you marked as wasted. A dash means no data was recorded for that metric on that date.</p>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[930px] text-sm">
                 <thead>
@@ -415,6 +415,7 @@ export default function Report({ habits, days, today }) {
                     <th className="px-2 py-2 font-medium">Calories</th>
                     <th className="px-2 py-2 font-medium">Protein</th>
                     <th className="px-2 py-2 font-medium">Screen time</th>
+                    <th className="px-2 py-2 font-medium">Spending</th>
                     <th className="px-2 py-2 font-medium">Time wasted</th>
                     <th className="px-2 py-2 font-medium">What I did / daily note</th>
                   </tr>
@@ -429,6 +430,7 @@ export default function Report({ habits, days, today }) {
                       <td className="whitespace-nowrap px-2 py-2">{r.kcal === null ? '—' : Math.round(r.kcal).toLocaleString()}</td>
                       <td className="whitespace-nowrap px-2 py-2">{r.protein === null ? '—' : `${Math.round(r.protein)} g`}</td>
                       <td className="whitespace-nowrap px-2 py-2">{r.screen === null ? '—' : hm(r.screen)}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{r.spend === null ? <span className="text-zinc-400">Not logged</span> : Math.round(r.spend).toLocaleString()}</td>
                       <td className="whitespace-nowrap px-2 py-2">{r.wasted === null ? <span className="text-zinc-400">Not logged</span> : hm(r.wasted)}</td>
                       <td className="max-w-[260px] px-2 py-2 text-zinc-600 dark:text-zinc-300">{r.note ? r.note : <span className="text-zinc-400">Not recorded</span>}</td>
                     </tr>

@@ -18,7 +18,7 @@ export default function Insights({ habits, days, today }) {
 
   return (
     <div className="space-y-5">
-      <AIProgressAnalyzer />
+      <AIProgressAnalyzer habits={habits} days={days} today={today} />
       <Card title="Insights">
       {list.length === 0 ? (
         <p className="py-6 text-center text-sm text-zinc-500">

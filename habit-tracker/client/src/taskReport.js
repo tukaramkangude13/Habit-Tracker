@@ -1,4 +1,4 @@
-import { addDays, fmt, key, parse } from './lib';
+import { addDays, fmt, habitAppliesOn, key, parse } from './lib';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const q = (c) => `"${String(c ?? '').replace(/"/g, '""')}"`;
@@ -6,11 +6,7 @@ const short = (d) => fmt(d, { month: 'short', day: 'numeric' });
 
 // Recurring tasks are due on each applicable date. One-time tasks remain pending
 // until their first check-off, then are completed once and no longer appear as pending.
-const dueOn = (d, habits) => {
-  const dow = parse(d).getDay();
-  return habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && (!h.createdAt || key(new Date(h.createdAt)) <= d) && (!h.archivedOn || d < h.archivedOn)
-    && !(h.frequency === 'weekdays' && (dow === 0 || dow === 6)));
-};
+const dueOn = (d, habits) => habits.filter((h) => h.frequency !== 'weekly' && h.frequency !== 'once' && habitAppliesOn(h, d));
 
 export function buildTaskReport(habits, days, today, from, to) {
   const first = Object.keys(days).sort()[0];
@@ -20,7 +16,7 @@ export function buildTaskReport(habits, days, today, from, to) {
   const onceHabits = habits.filter((h) => h.frequency === 'once');
   const onceDoneDate = new Map();
   onceHabits.forEach((h) => {
-    const completed = Object.keys(days).filter((d) => d >= (h.createdAt ? key(new Date(h.createdAt)) : from) && days[d]?.done?.includes(h._id)).sort()[0];
+    const completed = Object.keys(days).filter((d) => habitAppliesOn(h, d) && days[d]?.done?.includes(h._id)).sort()[0];
     if (completed) onceDoneDate.set(h._id, completed);
   });
   if (first && a <= z) {
@@ -32,11 +28,10 @@ export function buildTaskReport(habits, days, today, from, to) {
         byTask.set(h._id, t);
       });
       onceHabits.forEach((h) => {
-        const created = h.createdAt ? key(new Date(h.createdAt)) : from;
-        if (k < created || (h.archivedOn && k >= h.archivedOn)) return;
+        if (!habitAppliesOn(h, k)) return;
         const completedOn = onceDoneDate.get(h._id);
         if (completedOn && k > completedOn) return;
-        const t = byTask.get(h._id) || { name: h.name, done: 0, pending: 0, frequency: 'once' };
+        const t = byTask.get(h._id) || { habitId: h._id, name: h.name, done: 0, pending: 0, frequency: 'once' };
         if (completedOn === k) { done.push(h.name); t.done = 1; t.pending = 0; }
         else { pending.push(h.name); if (!completedOn) { t.pending = 1; t.done = 0; } }
         byTask.set(h._id, t);
@@ -52,7 +47,7 @@ export function buildTaskReport(habits, days, today, from, to) {
   const tasks = [...byTask.values()].map((t) => {
     let done = t.done, pending = t.pending;
     if (t.frequency === 'once') {
-      const h = onceHabits.find((item) => item.name === t.name);
+      const h = onceHabits.find((item) => item._id === t.habitId);
       const completedOn = h ? onceDoneDate.get(h._id) : null;
       done = completedOn && completedOn >= a && completedOn <= z ? 1 : 0;
       pending = !completedOn || completedOn > z ? 1 : 0;

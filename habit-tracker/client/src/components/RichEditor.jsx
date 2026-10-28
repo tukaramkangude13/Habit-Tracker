@@ -123,8 +123,8 @@ export default function RichEditor({ value, onChange, onError, header }) {
         )}
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(ev) => { [...ev.target.files].forEach(addImage); ev.target.value = ''; }} />
       </div>
-      <div className="flex-1 overflow-y-auto px-2 py-4 sm:p-8">
-        <div className="mx-auto min-h-full max-w-4xl rounded bg-white p-5 text-zinc-900 shadow-lg sm:p-12">
+      <div className="flex-1 overflow-y-auto px-2 py-3 sm:p-5">
+        <div className="mx-auto min-h-full max-w-4xl rounded-xl bg-white p-4 text-zinc-900 shadow-lg sm:p-8">
           {header}
           <EditorContent editor={editor} />
         </div>

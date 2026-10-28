@@ -95,8 +95,8 @@ export default function Expenses({ today }) {
   const used = budget ? Math.min(100, (s.total / budget) * 100) : 0;
   const rem = budget - s.total;
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="space-y-4 lg:col-span-2">
         <Card title="Spending" action={
           <div className="flex items-center gap-1 text-sm">
             <button className={iconBtn} aria-label="Previous month" onClick={() => setM(m - 1)}><ChevronLeft size={16} /></button>
@@ -151,7 +151,7 @@ export default function Expenses({ today }) {
         </Card>
       </div>
 
-      <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-4">
         <Card title="By category">
           {s.cats.length === 0 ? <p className="text-sm text-zinc-500">Nothing to show yet.</p> : (
             <ul className="space-y-3">

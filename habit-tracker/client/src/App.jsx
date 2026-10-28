@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import { bestStreak, doneCount, habitsOn, key, streakOf } from './lib';
+import { bestStreak, doneCount, habitAppliesOn, habitsOn, key, streakOf } from './lib';
 import Nutrition from './components/Nutrition';
 import Header from './components/Header';
 import ProgressCard from './components/ProgressCard';
@@ -17,11 +17,13 @@ import Reflection from './components/Reflection';
 import Insights from './components/Insights';
 import PhoneUsage from './components/PhoneUsage';
 import TimeAudit from './components/TimeAudit';
-import { CheckSquare, Wallet, Lightbulb, Utensils, Hourglass, BookOpen, BarChart3 } from 'lucide-react';
+import { CheckSquare, Wallet, Lightbulb, Utensils, Hourglass, BookOpen, BarChart3, CandlestickChart } from 'lucide-react';
 import Notes from './components/Notes';
 import Expenses from './components/Expenses';
 import Report from './components/Report';
 import LifeIndex from './components/LifeIndex';
+import TradingJournal from './components/TradingJournal';
+import Dashboard from './components/Dashboard';
 // Re-check every minute so a new day automatically shows a fresh checklist.
 function useToday() {
   const [t, setT] = useState(key());
@@ -62,7 +64,7 @@ export default function App({ user, onLogout }) {
 
   // Active tab
   const [tab, setTab] = useState(
-    () => localStorage.getItem('tab') || 'habits'
+    () => localStorage.getItem('tab') || 'dashboard'
   );
 
   const [habits, setHabits] = useState([]);
@@ -80,6 +82,12 @@ export default function App({ user, onLogout }) {
   useEffect(() => {
     localStorage.setItem('tab', tab);
   }, [tab]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dashboard-default-migrated')) return;
+    localStorage.setItem('dashboard-default-migrated', '1');
+    if (!localStorage.getItem('tab') || localStorage.getItem('tab') === 'habits') setTab('dashboard');
+  }, []);
 
   // Load application data
   useEffect(() => {
@@ -141,6 +149,7 @@ export default function App({ user, onLogout }) {
 
     saveDay(date, {
       done: nextDone,
+      habitsTracked: true,
     });
   };
 
@@ -163,7 +172,11 @@ export default function App({ user, onLogout }) {
   // `habits` holds every habit, archived ones included, so history stays intact.
   // `live` is what applies today and what the screens show.
   const live = useMemo(
-    () => habits.filter((h) => !h.archivedOn || h.archivedOn > today),
+    () => habits.filter((h) => habitAppliesOn(h, today)),
+    [habits, today]
+  );
+  const archivedHabits = useMemo(
+    () => habits.filter((h) => (h.endDate && h.endDate < today) || (h.archivedOn && h.archivedOn <= today)),
     [habits, today]
   );
 
@@ -206,14 +219,14 @@ export default function App({ user, onLogout }) {
   const day = days[today] || {};
 
    const shared = {
-    habits: live,
+    habits,
     days,
     today,
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+    <div className="app-shell min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-100/70 via-zinc-50 to-zinc-100 text-zinc-900 dark:from-indigo-950/30 dark:via-zinc-950 dark:to-zinc-950 dark:text-zinc-100">
+      <div className="mx-auto max-w-7xl space-y-5 px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
 
         {/* Header */}
         <Header
@@ -236,8 +249,9 @@ export default function App({ user, onLogout }) {
         )}
 
         {/* Tabs */}
-        <nav role="tablist" className="-mx-4 flex gap-1 overflow-x-auto border-b border-zinc-200 px-4 sm:mx-0 sm:px-0 dark:border-zinc-800">
+        <nav aria-label="Main navigation" className="sticky top-2 z-20 -mx-2 flex flex-nowrap gap-1 overflow-x-auto rounded-2xl border border-white/70 bg-white/85 p-1.5 shadow-lg shadow-zinc-900/[0.04] backdrop-blur-xl sm:mx-0 sm:flex-wrap sm:overflow-visible dark:border-zinc-800/80 dark:bg-zinc-900/85">
           {[
+            ['dashboard', 'Dashboard', BarChart3],
             ['habits', 'Habits', CheckSquare],
             ['insights', 'Insights', Lightbulb],
             ['expenses', 'Expenses', Wallet],
@@ -245,16 +259,17 @@ export default function App({ user, onLogout }) {
             ['time', 'Time Audit', Hourglass],
             ['report', 'Report', BarChart3],
             ['life-index', 'Life Index', BarChart3],
+            ['trading', 'Trading Journal', CandlestickChart],
             ['notes', 'Notes', BookOpen]
           ].map(([id, label, Icon]) => (
             <button
               key={id}
-              role="tab"
-              aria-selected={tab === id}
+              type="button"
+              aria-current={tab === id ? 'page' : undefined}
               onClick={() => setTab(id)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === id
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                className={`flex min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition sm:text-sm ${tab === id
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
                 }`}
             >
               <Icon size={16} />
@@ -263,13 +278,20 @@ export default function App({ user, onLogout }) {
           ))}
         </nav>
 
+        {/* Refresh the saved analysis whenever the Life Index tab becomes active. */}
+        <div className={tab === 'life-index' ? '' : 'hidden'}>
+          <LifeIndex today={today} active={tab === 'life-index'} />
+        </div>
+
+        {tab === 'dashboard' && <Dashboard habits={habits} goals={goals} days={days} today={today} active={tab === 'dashboard'} onNavigate={setTab} onToggle={toggle} onSaveDay={(patch) => saveDay(today, patch)} />}
+
         {/* HABITS TAB */}
         {tab === 'habits' ?
           (
-            <div className="grid gap-6 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-3">
 
               {/* LEFT SIDE */}
-              <div className="space-y-6 lg:col-span-2">
+              <div className="space-y-4 lg:col-span-2">
 
                 <ProgressCard
                                     done={doneCount(day, live)}
@@ -280,7 +302,10 @@ export default function App({ user, onLogout }) {
 
                 <HabitList
                   {...shared}
+                  habits={live}
+                  archivedHabits={archivedHabits}
                   onToggle={toggle}
+                  onMarkTracked={(tracked) => saveDay(today, { habitsTracked: tracked })}
                   onSave={upsert('habits', setHabits)}
                   onDelete={archiveHabit}                />
 
@@ -303,7 +328,7 @@ export default function App({ user, onLogout }) {
               </div>
 
               {/* RIGHT SIDE */}
-              <div className="min-w-0 space-y-6">
+              <div className="min-w-0 space-y-4">
 
                 <MoodTracker
                   mood={day.mood}
@@ -357,23 +382,20 @@ export default function App({ user, onLogout }) {
 
             )
 
-            :                tab === 'life-index' ? (
-<LifeIndex habits={habits} days={days} today={today} />
+            : tab === 'dashboard' ? null : tab === 'trading' ? (
+<TradingJournal />
             ) : tab === 'report' ? (
 <Report habits={habits} days={days} today={today} />            ) :                tab === 'nutrition' ? (
               <Nutrition today={today} />
             ) : tab === 'notes' ? (
               <Notes />
-            ) : tab === 'notes' ? (
-              <Notes />
             ) : tab === 'time' ? (
-              <div className="space-y-6"><PhoneUsage today={today} /><TimeAudit today={today} /></div>) :
-              (
+              <div className="space-y-4"><PhoneUsage today={today} /><TimeAudit today={today} /></div>) : tab === 'expenses' ? (
 
                 /* EXPENSES TAB */
                 <Expenses today={today} />
 
-              )
+              ) : null
 
         }
 

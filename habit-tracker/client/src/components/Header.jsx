@@ -1,32 +1,25 @@
-import { Flame, Moon, Sun, User } from 'lucide-react';
-import { fmt, parse } from '../lib';
-import { iconBtn } from './ui';
+import { Flame, LogOut, Moon, Sun, User } from 'lucide-react';
+import { fmt } from '../lib';
+import { btn, iconBtn } from './ui';
 
-const QUOTES = [
-  'Small steps, repeated daily, add up.',
-  'Consistency beats intensity.',
-  'Show up today; the results follow.',
-  'You are what you repeatedly do.',
-  'Progress, not perfection.',
-];
-
-export default function Header({ today, streak, dark, onToggleTheme }) {
+export default function Header({ today, streak, dark, onToggleTheme, user, onLogout }) {
   const h = new Date().getHours();
-  const greet = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
-  const quote = QUOTES[Math.floor(parse(today) / 864e5) % QUOTES.length];
+  const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4">
+    <header className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold">{greet} 👋</h1>
+        <p className="text-xs font-semibold uppercase tracking-[.12em] text-indigo-600 dark:text-indigo-400">Your personal dashboard</p>
+        <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">{greet}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</h1>
         <p className="text-sm text-zinc-500">{fmt(today, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-        <p className="mt-1 text-xs italic text-zinc-400">{quote}</p>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-600 dark:bg-orange-500/10">
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <span className="flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-1.5 text-xs font-semibold text-orange-600 sm:px-3 sm:text-sm dark:bg-orange-500/10">
           <Flame size={16} />{streak} Day Streak
         </span>
         <button onClick={onToggleTheme} aria-label="Toggle dark mode" className={iconBtn}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20" aria-label="Profile"><User size={18} /></div>
+        <span className="hidden h-9 w-9 place-items-center rounded-full bg-indigo-100 text-indigo-600 sm:grid dark:bg-indigo-500/20" aria-label={user?.name || 'Profile'}><User size={18} /></span>
+        <button type="button" onClick={onLogout} aria-label="Log out" className={`${iconBtn} app-logout-mobile`}><LogOut size={17} /></button>
+        <button type="button" onClick={onLogout} className={`${btn} app-logout-desktop`}><LogOut size={15} />Log out</button>
       </div>
     </header>
   );

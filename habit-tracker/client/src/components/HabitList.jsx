@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { Check, Flame, Pencil, Plus, Trash2 } from 'lucide-react';
-import { streakOf } from '../lib';
-import { Card, Modal, Field, ICONS, inp, btnP, iconBtn } from './ui';
+import { key, streakOf } from '../lib';
+import { Card, Modal, Field, ICONS, inp, btn, btnP, iconBtn } from './ui';
 
-const blank = { name: '', icon: 'target', frequency: 'daily', goal: '', reminder: '' };
+const blank = { name: '', icon: 'target', frequency: 'daily', goal: '', reminder: '', startDate: key(), endDate: '' };
 
 function HabitModal({ habit, onClose, onSave }) {
-  const [f, setF] = useState(habit);
+  const [f, setF] = useState(() => ({ ...habit, startDate: habit.startDate || (habit.createdAt ? key(new Date(habit.createdAt)) : key()), endDate: habit.endDate || '' }));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = () => {
     const name = f.name.trim();
     if (!name) throw new Error('Habit name is required.');
     if (name.length > 40) throw new Error('Name must be 40 characters or fewer.');
+    if (f.endDate && f.startDate && f.endDate < f.startDate) throw new Error('End date must be on or after the start date.');
     return onSave({ ...f, name });
   };
   return (
@@ -28,23 +29,41 @@ function HabitModal({ habit, onClose, onSave }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="Frequency">
           <select className={inp} value={f.frequency} onChange={set('frequency')}>
-            <option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly</option><option value="once">One-time task</option>
+            <option value="daily">Every day</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly</option><option value="once">One-time task</option>
           </select>
         </Field>
         <Field label="Reminder (optional)"><input type="time" className={inp} value={f.reminder} onChange={set('reminder')} /></Field>
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Start date"><input type="date" className={inp} value={f.startDate} onChange={set('startDate')} /></Field>
+        <Field label="Last day (optional)"><input type="date" className={inp} min={f.startDate} value={f.endDate} onChange={set('endDate')} /></Field>
+      </div>
+      <p className="-mt-2 text-xs text-zinc-500">Leave the last day empty for an ongoing habit. Reports count only dates in this schedule.</p>
       <Field label="Goal (optional)"><input className={inp} value={f.goal} onChange={set('goal')} placeholder="e.g. 30 minutes" /></Field>
     </Modal>
   );
 }
 
-export default function HabitList({ habits, days, today, onToggle, onSave, onDelete }) {
+export default function HabitList({ habits, archivedHabits = [], days, today, onToggle, onMarkTracked, onSave, onDelete }) {
   const [edit, setEdit] = useState(null);
   const done = days[today]?.done || [];
+  const explicitlyTracked = days[today]?.habitsTracked === true;
+  const trackedByCompletion = done.length > 0;
+  const habitsTracked = explicitlyTracked || trackedByCompletion;
   return (
-    <Card title="Today's Habits" action={<button className={btnP} onClick={() => setEdit(blank)}><Plus size={16} />Add Habit</button>}>
+    <Card title="Today's Habits" action={<div className="flex flex-wrap items-center gap-2">
+      {habits.length > 0 && <button type="button" className={`${habitsTracked ? btn : btnP} py-1.5 text-xs`} aria-pressed={habitsTracked} disabled={trackedByCompletion && !explicitlyTracked} onClick={() => onMarkTracked?.(!habitsTracked)} title="Mark that you reviewed today's scheduled habits. An empty completed list is then counted as a tracked zero, not missing data.">{trackedByCompletion && !explicitlyTracked ? 'Tracked from check-offs' : habitsTracked ? 'Habits tracked ✓' : 'Mark habits tracked'}</button>}
+      {archivedHabits.length > 0 && <select aria-label="Reuse a past habit" defaultValue="" className={`${inp} w-auto max-w-48 py-1.5 text-xs`} onChange={(e) => {
+        const [action, id] = e.target.value.split(':');
+        const source = archivedHabits.find(h => h._id === id);
+        if (source && action === 'reuse') setEdit({ name: source.name, icon: source.icon || 'target', frequency: source.frequency || 'daily', goal: source.goal || '', reminder: source.reminder || '', startDate: today, endDate: '' });
+        if (source && action === 'edit') setEdit(source);
+        e.target.value = '';
+      }}><option value="">Past habits...</option><optgroup label="Reuse as a new habit">{archivedHabits.map(h => <option key={`reuse-${h._id}`} value={`reuse:${h._id}`}>{h.name}</option>)}</optgroup><optgroup label="Correct dates in past reports">{archivedHabits.map(h => <option key={`edit-${h._id}`} value={`edit:${h._id}`}>{h.name}</option>)}</optgroup></select>}
+      <button className={btnP} onClick={() => setEdit(blank)}><Plus size={16} />Add Habit</button>
+    </div>}>
       {habits.length === 0 ? (
-        <p className="py-8 text-center text-sm text-zinc-500">No habits yet. Add your first habit to start tracking.</p>
+        <p className="py-5 text-center text-sm text-zinc-500">No habits yet. Add your first habit to start tracking.</p>
       ) : (
         <ul className="space-y-2">
           {habits.map((h) => {
@@ -59,7 +78,7 @@ export default function HabitList({ habits, days, today, onToggle, onSave, onDel
                 <I size={18} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
                 <div className="min-w-0 flex-1">
                   <p className={`truncate text-sm font-medium ${d ? 'text-zinc-400 line-through' : ''}`}>{h.name}</p>
-                  {(h.goal || h.reminder) && <p className="truncate text-xs text-zinc-500">{[h.goal, h.reminder && `Reminder ${h.reminder}`].filter(Boolean).join(', ')}</p>}
+                  {(h.goal || h.reminder || h.endDate) && <p className="truncate text-xs text-zinc-500">{[h.goal, h.reminder && `Reminder ${h.reminder}`, h.endDate && `Through ${h.endDate}`].filter(Boolean).join(', ')}</p>}
                 </div>
                 <span className="flex items-center gap-1 text-xs font-medium text-orange-500"><Flame size={14} />{s}</span>
                 <button className={iconBtn} aria-label={`Edit ${h.name}`} onClick={() => setEdit(h)}><Pencil size={15} /></button>

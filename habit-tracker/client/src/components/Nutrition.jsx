@@ -482,7 +482,7 @@ export default function Nutrition({ today }) {
 
   if (view === 'analysis') {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {nav}
         {error}
 
@@ -501,7 +501,7 @@ export default function Nutrition({ today }) {
 
   if (!profile || edit) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {nav}
         {error}
 
@@ -529,12 +529,12 @@ export default function Nutrition({ today }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5">
       {nav}
       {error}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           <Card
             title={
               isToday
@@ -866,7 +866,7 @@ export default function Nutrition({ today }) {
           </Card>
         </div>
 
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-4">
           <Card
             title="Your plan"
             action={
