@@ -13,12 +13,60 @@ import {
   calculateEma, dateKeyInTimeZone, dateKeyToInstant, getLifeIndexCategories, isDateKey, scoreLifeIndexDay, weekStartDateKey,
 } from './lifeIndex.js';
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) { console.error('[auth] JWT_SECRET is missing in server/.env'); process.exit(1); }
-import dns from 'node:dns';
-dns.setServers(['8.8.8.8', '1.1.1.1']);
+let databaseConnection;
+
+function explain(e) {
+  const m = `${e.message} ${e.cause?.message || ''}`;
+  if (/MONGO_URI is missing/i.test(m)) return 'Set MONGO_URI in the Vercel project Environment Variables.';
+  if (/bad auth|Authentication failed/i.test(m)) return 'MongoDB rejected the credentials. Check the username, password, and database user permissions.';
+  if (/querySrv|ENOTFOUND|ESERVFAIL/i.test(m)) return 'The MongoDB host could not be resolved. Check the Atlas URI and network access.';
+  if (/ECONNREFUSED/i.test(m)) return 'MongoDB refused the connection. Check that the cluster is available and network access is allowed.';
+  if (/ETIMEDOUT|timed out|MongoServerSelectionError/i.test(m)) return 'MongoDB could not be reached. Check Atlas Network Access and confirm the cluster is running.';
+  return 'Check the MongoDB deployment settings and try again.';
+}
+
+async function connectDatabase() {
+  if (mongoose.connection.readyState === 1) {
+    if (databaseConnection) await databaseConnection;
+    return;
+  }
+  if (mongoose.connection.readyState === 0) databaseConnection = null;
+  if (!databaseConnection) {
+    const uri = process.env.MONGO_URI || (!process.env.VERCEL ? 'mongodb://127.0.0.1:27017/habit-tracker' : '');
+    if (!uri) throw new Error('MONGO_URI is missing');
+    databaseConnection = mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 }).then(async () => {
+      console.log('[db] Connected to database:', mongoose.connection.name);
+      await Promise.all([
+        Day.syncIndexes(), Setting.syncIndexes(), LifeDailyScore.createIndexes(),
+        LifeIndexSnapshot.createIndexes(), LifeIndexState.syncIndexes(), TradingSetup.syncIndexes(),
+        TradingTrade.syncIndexes(), WeeklyReview.createIndexes(),
+      ]);
+    }).catch((error) => {
+      databaseConnection = null;
+      throw error;
+    });
+  }
+  await databaseConnection;
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
+app.get('/api/health', (req, res) => res.json({
+  ok: true,
+  databaseConfigured: Boolean(process.env.MONGO_URI || !process.env.VERCEL),
+  databaseConnected: mongoose.connection.readyState === 1,
+  authenticationConfigured: Boolean(JWT_SECRET),
+}));
+app.use(async (req, res, next) => {
+  try {
+    await connectDatabase();
+    next();
+  } catch (error) {
+    console.error('[db] Request connection failed:', error.name, '|', explain(error));
+    res.status(503).json({ error: `Database unavailable. ${explain(error)}` });
+  }
+});
 const { Schema } = mongoose;
 const owner = { userId: { type: Schema.Types.ObjectId, required: true, index: true } };
 
@@ -163,15 +211,28 @@ const wrap = (fn) => async (req, res) => {
 };
 
 // ---------- Auth ----------
-const sign = (u) => jwt.sign({ id: u._id }, JWT_SECRET, { expiresIn: '7d' });
+const sign = (u) => {
+  if (!JWT_SECRET) {
+    const error = new Error('Set JWT_SECRET in the Vercel project Environment Variables.');
+    error.statusCode = 503;
+    throw error;
+  }
+  return jwt.sign({ id: u._id }, JWT_SECRET, { expiresIn: '7d' });
+};
 const publicUser = (u) => ({ id: u._id, name: u.name, email: u.email });
 const auth = (req, res, next) => {
+  if (!JWT_SECRET) return res.status(503).json({ error: 'Authentication is not configured. Set JWT_SECRET in the Vercel project Environment Variables.' });
   const token = (req.headers.authorization || '').replace(/^Bearer /, '');
   try { req.userId = jwt.verify(token, JWT_SECRET).id; next(); }
   catch { res.status(401).json({ error: 'Please log in again.' }); }
 };
 
 app.post('/api/auth/signup', wrap(async (req) => {
+  if (!JWT_SECRET) {
+    const error = new Error('Set JWT_SECRET in the Vercel project Environment Variables.');
+    error.statusCode = 503;
+    throw error;
+  }
   const name = String(req.body.name || '').trim();
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
@@ -185,6 +246,11 @@ app.post('/api/auth/signup', wrap(async (req) => {
 }));
 
 app.post('/api/auth/login', wrap(async (req) => {
+  if (!JWT_SECRET) {
+    const error = new Error('Set JWT_SECRET in the Vercel project Environment Variables.');
+    error.statusCode = 503;
+    throw error;
+  }
   const email = String(req.body.email || '').trim().toLowerCase();
   const user = await User.findOne({ email });
   if (!user || !(await bcrypt.compare(String(req.body.password || ''), user.password))) throw new Error('Incorrect email or password.');
@@ -1001,26 +1067,11 @@ app.post('/api/trading/ai-analysis', wrap(async (req) => {
   try { return JSON.parse(result.choices?.[0]?.message?.content || '{}'); } catch { throw new Error('AI returned an invalid analysis. Please retry.'); }
 }));
 
-// ---------- Database connection (with diagnostics) ----------
-const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/habit-tracker';
-console.log('[db] MONGO_URI found in .env:', Boolean(process.env.MONGO_URI));
-console.log('[db] Connecting to:', uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
-function explain(e) {
-  const m = `${e.message} ${e.cause?.message || ''}`;
-  if (/bad auth|Authentication failed/i.test(m)) return 'Wrong username or password, or the user has no read/write role.';
-  if (/querySrv|ENOTFOUND|ESERVFAIL/i.test(m)) return 'Atlas cluster host could not be resolved. Check the Atlas URI and your network DNS settings.';
-  if (/ECONNREFUSED/i.test(m)) return 'The database connection was refused. Check that the MongoDB service or Atlas cluster is reachable and that network access is allowed.';
-  if (/ETIMEDOUT|timed out|MongoServerSelectionError/i.test(m)) return 'Server unreachable. Check Atlas Network Access, that the cluster is not paused, and VPN/firewall.';
-  return 'Unrecognised error. Copy the full output above when asking for help.';
-}
+export default app;
 
-mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 }).then(async () => {
-  console.log('[db] Connected to database:', mongoose.connection.name);
-  await Promise.all([Day.syncIndexes(), Setting.syncIndexes(), LifeDailyScore.createIndexes(), LifeIndexSnapshot.createIndexes(), LifeIndexState.syncIndexes(), TradingSetup.syncIndexes(), TradingTrade.syncIndexes(), WeeklyReview.createIndexes()]); // syncs the prior non-unique LifeIndexState userId index to its unique definition
+const isDirectExecution = process.argv[1]
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectExecution && !process.env.VERCEL) {
   const port = process.env.PORT || 5000;
   app.listen(port, () => console.log(`API on :${port}`));
-}).catch((e) => {
-  console.error('[db] Connection failed:', e.name, '|', e.message);
-  console.error('[db] Likely reason:', explain(e));
-  process.exit(1);
-});
+}

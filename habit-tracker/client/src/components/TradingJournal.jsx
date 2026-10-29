@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-const API = import.meta.env.VITE_API_URL || "";
-
 const pad = (n) => String(n).padStart(2, "0");
 // Local-time value for <input type="datetime-local"> (toISOString() would give UTC).
 const toLocalInput = (v) => {
@@ -175,7 +173,7 @@ export default function TradingJournal() {
     "";
 
   async function request(url, options = {}) {
-    const response = await fetch(`${API}${url}`, {
+    const response = await fetch(url, {
       ...options,
       headers: {
         "Content-Type": "application/json",

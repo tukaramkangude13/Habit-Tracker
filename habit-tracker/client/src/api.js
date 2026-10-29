@@ -1,6 +1,6 @@
-const BASE =
-  import.meta.env.VITE_API_URL ||
-  'http://localhost:5000/api';
+// Keep browser requests same-origin. Vite proxies /api locally, and Vercel
+// routes it to the API deployment via client/vercel.json in production.
+const BASE = '/api';
 
 export const getToken = () => {
   return localStorage.getItem('token');
