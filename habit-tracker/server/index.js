@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import path from 'node:path';
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url';
+import { activeHabitNameConflict, findActiveHabitNameDuplicate, isHabitNameActive, normalizeHabitName } from './habitRules.js';
 import {
   LIFE_INDEX_BASE, LIFE_INDEX_EMA_PERIODS, LIFE_INDEX_MIN_COVERAGE, LIFE_INDEX_TIMEFRAMES, LIFE_INDEX_TIME_ZONE, LIFE_INDEX_VERSION,
   addDateKeyDays, buildDailyIndexHistory, buildLifeCandles, bucketStartForTime,
@@ -37,7 +38,7 @@ async function connectDatabase() {
     databaseConnection = mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 }).then(async () => {
       console.log('[db] Connected to database:', mongoose.connection.name);
       await Promise.all([
-        Day.syncIndexes(), Setting.syncIndexes(), LifeDailyScore.createIndexes(),
+        Habit.createIndexes(), Day.syncIndexes(), Setting.syncIndexes(), LifeDailyScore.createIndexes(),
         LifeIndexSnapshot.createIndexes(), LifeIndexState.syncIndexes(), TradingSetup.syncIndexes(),
         TradingTrade.syncIndexes(), WeeklyReview.createIndexes(),
       ]);
@@ -86,7 +87,13 @@ const Habit = mongoose.model('Habit', new Schema({
   goal: { type: String, default: '' },
   reminder: { type: String, default: '' },
   archivedOn: { type: String, default: '' }, // first date the habit no longer applies; '' = still active
+  activeNameKey: { type: String, default: null, select: false },
 }, { timestamps: true }));
+Habit.schema.index({ userId: 1, activeNameKey: 1 }, {
+  unique: true,
+  partialFilterExpression: { activeNameKey: { $type: 'string' } },
+  name: 'uniq_active_habit_name_per_user',
+});
 
 const Goal = mongoose.model('Goal', new Schema({
   ...owner,
@@ -288,16 +295,31 @@ app.post('/api/device/screentime', wrap(async (req) => {
 app.use('/api', (req, res, next) => (req.path.startsWith('/auth/') ? next() : auth(req, res, next)));
 
 // ---------- Per-user data ----------
-function crud(path, Model, onDelete, afterChange) {
+function crud(path, Model, onDelete, afterChange, hooks = {}) {
   app.get(`/api/${path}`, wrap((req) => Model.find({ userId: req.userId }).sort('createdAt')));
   app.post(`/api/${path}`, wrap(async (req) => {
-    const created = await Model.create({ ...req.body, userId: req.userId });
+    const body = hooks.beforeCreate ? await hooks.beforeCreate(req) : req.body;
+    let created;
+    try {
+      created = await Model.create({ ...body, userId: req.userId });
+    } catch (error) {
+      throw hooks.mapWriteError?.(error, req) || error;
+    }
     if (afterChange) await afterChange(req.userId, created, 'create', null, path);
     return created;
   }));
   app.put(`/api/${path}/:id`, wrap(async (req) => {
-    const previous = afterChange ? await Model.findOne({ _id: req.params.id, userId: req.userId }).lean() : null;
-    const updated = await Model.findOneAndUpdate({ _id: req.params.id, userId: req.userId }, { ...req.body, userId: req.userId }, { new: true, runValidators: true });
+    const current = afterChange || hooks.beforeUpdate
+      ? await Model.findOne({ _id: req.params.id, userId: req.userId }).select(hooks.select || '').lean()
+      : null;
+    const previous = afterChange ? current : null;
+    const body = hooks.beforeUpdate ? await hooks.beforeUpdate(req, current) : req.body;
+    let updated;
+    try {
+      updated = await Model.findOneAndUpdate({ _id: req.params.id, userId: req.userId }, { ...body, userId: req.userId }, { new: true, runValidators: true });
+    } catch (error) {
+      throw hooks.mapWriteError?.(error, req) || error;
+    }
     if (updated && afterChange) await afterChange(req.userId, updated, 'update', previous, path);
     return updated;
   }));
@@ -309,7 +331,63 @@ function crud(path, Model, onDelete, afterChange) {
   }));
 }
 
-crud('habits', Habit, (id, userId) => Day.updateMany({ userId }, { $pull: { done: id } }), afterLifeIndexSourceChange);
+const habitHooks = {
+  select: '+activeNameKey',
+  async beforeCreate(req) {
+    const body = req.body || {};
+    const name = String(body.name ?? '').normalize('NFKC').trim();
+    if (!name) throw new Error('Habit name is required.');
+    if (name.length > 40) throw new Error('Habit name must be 40 characters or fewer.');
+    const today = dateKeyInTimeZone(new Date(), LIFE_INDEX_TIME_ZONE);
+    await releaseExpiredHabitNameKeys(req.userId, today);
+    const existing = await Habit.find({ userId: req.userId }).select('_id name endDate archivedOn').lean();
+    const duplicate = findActiveHabitNameDuplicate(existing, name, today);
+    if (duplicate) throw activeHabitNameConflict(duplicate.name);
+    return {
+      ...body,
+      name,
+      activeNameKey: isHabitNameActive({ ...body, name }, today) ? normalizeHabitName(name) : null,
+    };
+  },
+  async beforeUpdate(req, previous) {
+    if (!previous) return req.body || {};
+    const body = req.body || {};
+    const name = String(body.name ?? previous.name ?? '').normalize('NFKC').trim();
+    if (!name) throw new Error('Habit name is required.');
+    if (name.length > 40) throw new Error('Habit name must be 40 characters or fewer.');
+    const today = dateKeyInTimeZone(new Date(), LIFE_INDEX_TIME_ZONE);
+    await releaseExpiredHabitNameKeys(req.userId, today);
+    const merged = { ...previous, ...body, name };
+    const wasActive = isHabitNameActive(previous, today);
+    const isActive = isHabitNameActive(merged, today);
+    const nameChanged = normalizeHabitName(name) !== normalizeHabitName(previous.name);
+    let activeNameKey = null;
+
+    if (isActive) {
+      const existing = await Habit.find({ userId: req.userId }).select('_id name endDate archivedOn').lean();
+      const duplicate = findActiveHabitNameDuplicate(existing, name, today, req.params.id);
+      if (duplicate && (nameChanged || !wasActive)) throw activeHabitNameConflict(duplicate.name);
+      if (!duplicate) activeNameKey = normalizeHabitName(name);
+      else activeNameKey = previous.activeNameKey || null;
+    }
+
+    return { ...body, name, activeNameKey };
+  },
+  mapWriteError(error, req) {
+    if (error.code === 11000 && error.keyPattern?.activeNameKey) {
+      return activeHabitNameConflict(req.body?.name || 'this habit');
+    }
+    return null;
+  },
+};
+
+async function releaseExpiredHabitNameKeys(userId, today) {
+  const rows = await Habit.find({ userId, activeNameKey: { $type: 'string' } }).select('_id endDate archivedOn').lean();
+  const expiredIds = rows.filter((habit) => !isHabitNameActive(habit, today)).map((habit) => habit._id);
+  if (expiredIds.length) await Habit.updateMany({ userId, _id: { $in: expiredIds } }, { $set: { activeNameKey: null } });
+}
+
+crud('habits', Habit, (id, userId) => Day.updateMany({ userId }, { $pull: { done: id } }), afterLifeIndexSourceChange, habitHooks);
 crud('goals', Goal);
 crud('reflections', Reflection);
 crud('expenses', Expense, null, afterLifeIndexSourceChange);
