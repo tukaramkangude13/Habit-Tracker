@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -268,6 +268,10 @@ export default function Nutrition({ today }) {
   const [date, setDate] = useState(today);
   const [meal, setMeal] = useState(mealNow());
   const [qty, setQty] = useState(1);
+  const [addingFood, setAddingFood] = useState(false);
+  const [savingWeight, setSavingWeight] = useState(false);
+  const foodLock = useRef(false);
+  const weightLock = useRef(false);
 
   const [custom, setCustom] = useState({
     name: '',
@@ -316,6 +320,10 @@ export default function Nutrition({ today }) {
     carbs = 0,
     fat = 0
   ) => {
+    if (foodLock.current) return false;
+    foodLock.current = true;
+    setAddingFood(true);
+    try {
     const q = Number(qty);
 
     if (!(q >= 0.1 && q <= 20)) {
@@ -345,6 +353,11 @@ export default function Nutrition({ today }) {
     });
 
     setFoods((list) => [...list, r]);
+    return true;
+    } finally {
+      foodLock.current = false;
+      setAddingFood(false);
+    }
   };
 
   const addFood = guard(post);
@@ -366,13 +379,14 @@ export default function Nutrition({ today }) {
       );
     }
 
-    await post(
+    const added = await post(
       custom.name.trim(),
       +custom.kcal,
       +custom.protein || 0,
       +custom.carbs || 0,
       +custom.fat || 0
     );
+    if (!added) return;
 
     setCustom({
       name: '',
@@ -385,6 +399,10 @@ export default function Nutrition({ today }) {
 
   const addWeight = guard(async (e) => {
     e.preventDefault();
+    if (weightLock.current) return;
+    weightLock.current = true;
+    setSavingWeight(true);
+    try {
 
     if (!(+kg >= 25 && +kg <= 250)) {
       throw new Error(
@@ -404,6 +422,10 @@ export default function Nutrition({ today }) {
     );
 
     setKg('');
+    } finally {
+      weightLock.current = false;
+      setSavingWeight(false);
+    }
   });
 
   const cur = weights.length
@@ -680,6 +702,7 @@ export default function Nutrition({ today }) {
         <button
           key={n}
           type="button"
+          disabled={addingFood}
           onClick={() => addFood(n, k, p, c, f)}
           className={`${btn} py-1 text-xs`}
         >
@@ -701,6 +724,7 @@ export default function Nutrition({ today }) {
         <button
           key={n}
           type="button"
+          disabled={addingFood}
           onClick={() => addFood(n, k, p, c, f)}
           className={`${btn} py-1 text-xs`}
         >
@@ -794,7 +818,7 @@ export default function Nutrition({ today }) {
                 }
               />
 
-              <button className={btnP}>Add food</button>
+              <button disabled={addingFood} className={btnP}>{addingFood ? 'Adding…' : 'Add food'}</button>
             </form>
 
             <p className="mt-2 text-xs text-zinc-400">
@@ -948,7 +972,7 @@ export default function Nutrition({ today }) {
                 required
               />
 
-              <button className={btnP}>Log</button>
+              <button disabled={savingWeight} className={btnP}>{savingWeight ? 'Saving…' : 'Log'}</button>
             </form>
 
             <WeightChart

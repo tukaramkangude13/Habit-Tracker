@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { addDays, fmt, key, parse } from '../lib';
@@ -13,18 +13,24 @@ export default function Reflection({ today }) {
   const [items, setItems] = useState([]);
   const [f, setF] = useState(blank());
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
   useEffect(() => { api.get('/reflections').then(setItems).catch((e) => setErr(e.message)); }, []);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const add = async (e) => {
     e.preventDefault();
+    if (saveLock.current) return;
     if (!f.what.trim()) return setErr('Write what happened first.');
+    saveLock.current = true;
+    setSaving(true);
     try {
       setErr('');
       const r = await api.post('/reflections', { ...f, what: f.what.trim(), next: f.next.trim(), date: today, hour: new Date().getHours() });
       setItems((l) => [...l, r]);
       setF(blank());
     } catch (x) { setErr(x.message); }
+    finally { saveLock.current = false; setSaving(false); }
   };
   const del = async (id) => {
     try { await api.del(`/reflections/${id}`); setItems((l) => l.filter((x) => x._id !== id)); } catch (x) { setErr(x.message); }
@@ -56,7 +62,7 @@ export default function Reflection({ today }) {
         <Field label="What happened, and what were you thinking?"><textarea rows={3} maxLength={500} className={`${inp} resize-none`} value={f.what} onChange={set('what')} /></Field>
         <Field label="Next time I will..."><input maxLength={300} className={inp} value={f.next} onChange={set('next')} placeholder="e.g. leave my phone in another room" /></Field>
         {err && <p role="alert" className="text-xs text-red-500">{err}</p>}
-        <button className={btnP}>Save entry</button>
+        <button disabled={saving} className={btnP}>{saving ? 'Saving…' : 'Save entry'}</button>
       </form>
 
       {items.length > 0 && (

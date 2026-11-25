@@ -291,7 +291,7 @@ export default function App({ user, onLogout }) {
             <div className="grid gap-4 lg:grid-cols-3">
 
               {/* LEFT SIDE */}
-              <div className="space-y-4 lg:col-span-2">
+              <div className="min-w-0 space-y-4 lg:col-span-2">
 
                 <ProgressCard
                                     done={doneCount(day, live)}
@@ -303,6 +303,7 @@ export default function App({ user, onLogout }) {
                 <HabitList
                   {...shared}
                   habits={live}
+                  allHabits={habits}
                   archivedHabits={archivedHabits}
                   onToggle={toggle}
                   onMarkTracked={(tracked) => saveDay(today, { habitsTracked: tracked })}

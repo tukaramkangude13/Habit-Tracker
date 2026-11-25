@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { fmt, parse } from '../lib';
@@ -16,6 +16,10 @@ export default function Expenses({ today }) {
   const [f, setF] = useState(blank(today));
   const [editId, setEditId] = useState(null);
   const [err, setErr] = useState('');
+  const [savingEntry, setSavingEntry] = useState(false);
+  const [savingBudget, setSavingBudget] = useState(false);
+  const entryLock = useRef(false);
+  const budgetLock = useRef(false);
 
   useEffect(() => {
     Promise.all([api.get('/expenses'), api.get('/settings')])
@@ -42,6 +46,7 @@ export default function Expenses({ today }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
  const submit = async (e) => {
   e.preventDefault();
+  if (entryLock.current) return;
 
   const amount = Number(f.amount);
 
@@ -54,6 +59,8 @@ export default function Expenses({ today }) {
   }
 
   try {
+    entryLock.current = true;
+    setSavingEntry(true);
     setErr('');
 
     const body = {
@@ -81,15 +88,22 @@ export default function Expenses({ today }) {
 
   } catch (x) {
     setErr(x.message);
+  } finally {
+    entryLock.current = false;
+    setSavingEntry(false);
   }
 };
   const edit = (i) => { setEditId(i._id); setF({ amount: i.amount, category: i.category, date: i.date, note: i.note }); };
   const del = async (id) => { try { await api.del(`/expenses/${id}`); setItems((l) => l.filter((x) => x._id !== id)); } catch (x) { setErr(x.message); } };
   const saveBudget = async (e) => {
     e.preventDefault();
+    if (budgetLock.current) return;
     const v = Number(budgetText || 0);
     if (!(v >= 0)) return setErr('Budget cannot be negative.');
+    budgetLock.current = true;
+    setSavingBudget(true);
     try { setErr(''); await api.put('/settings/budget', { value: v }); setBudget(v); } catch (x) { setErr(x.message); }
+    finally { budgetLock.current = false; setSavingBudget(false); }
   };
 
   const used = budget ? Math.min(100, (s.total / budget) * 100) : 0;
@@ -128,8 +142,8 @@ export default function Expenses({ today }) {
             <Field label="Note (optional)"><input maxLength={100} className={inp} value={f.note} onChange={set('note')} placeholder="e.g. Lunch at canteen" /></Field>
             {err && <p role="alert" className="text-xs text-red-500 sm:col-span-2">{err}</p>}
             <div className="flex gap-2 sm:col-span-2">
-              <button className={btnP}>{editId ? 'Save changes' : 'Add expense'}</button>
-              {editId && <button type="button" className={btn} onClick={() => { setEditId(null); setF(blank(today)); }}>Cancel</button>}
+              <button disabled={savingEntry} className={btnP}>{savingEntry ? 'Saving…' : editId ? 'Save changes' : 'Add expense'}</button>
+              {editId && <button type="button" disabled={savingEntry} className={btn} onClick={() => { setEditId(null); setF(blank(today)); }}>Cancel</button>}
             </div>
           </form>
         </Card>
@@ -167,7 +181,7 @@ export default function Expenses({ today }) {
         <Card title="Monthly budget">
           <form onSubmit={saveBudget} className="flex gap-2">
             <input type="number" min="0" aria-label="Monthly budget" className={inp} value={budgetText} onChange={(e) => setBudgetText(e.target.value)} placeholder="e.g. 8000" />
-            <button className={btnP}>Save</button>
+            <button disabled={savingBudget} className={btnP}>{savingBudget ? 'Saving…' : 'Save'}</button>
           </form>
           <p className="mt-2 text-xs text-zinc-500">Applies to every month. Set it to 0 to turn it off.</p>
         </Card>

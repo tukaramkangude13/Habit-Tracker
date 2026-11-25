@@ -30,9 +30,10 @@ const Tb = ({ label, onClick, active, children }) => (
 const Sep = () => <span className="mx-1 h-5 w-px shrink-0 bg-zinc-200 dark:bg-zinc-700" />;
 
 // header: element shown at the top of the page, above the text (the note title).
-export default function RichEditor({ value, onChange, onError, header }) {
+export default function RichEditor({ value, onChange, onError, header, voiceInsert }) {
   const edRef = useRef(null);
   const fileRef = useRef(null);
+  const lastVoiceInsertId = useRef(null);
   const [dlg, setDlg] = useState(null);
 
   const addImage = async (file) => {
@@ -62,6 +63,11 @@ export default function RichEditor({ value, onChange, onError, header }) {
     },
   });
   useEffect(() => { edRef.current = editor; }, [editor]);
+  useEffect(() => {
+    if (!editor || !voiceInsert || voiceInsert.id === lastVoiceInsertId.current) return;
+    lastVoiceInsertId.current = voiceInsert.id;
+    if (voiceInsert.text) editor.chain().focus().insertContent({ type: 'text', text: voiceInsert.text }).run();
+  }, [editor, voiceInsert]);
   if (!editor) return null;
 
   const e = editor, c = () => e.chain().focus();

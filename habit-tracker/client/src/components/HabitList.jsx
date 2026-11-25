@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Check, Flame, Pencil, Plus, Trash2 } from 'lucide-react';
 import { key, streakOf } from '../lib';
+import { findActiveHabitNameDuplicate, isHabitNameActive, newestPastHabitPerName, normalizeHabitName, pastHabitLabel } from '../habitRules';
 import { Card, Modal, Field, ICONS, inp, btn, btnP, iconBtn } from './ui';
 
 const blank = { name: '', icon: 'target', frequency: 'daily', goal: '', reminder: '', startDate: key(), endDate: '' };
 
-function HabitModal({ habit, onClose, onSave }) {
+function HabitModal({ habit, today, allHabits, onClose, onSave }) {
   const [f, setF] = useState(() => ({ ...habit, startDate: habit.startDate || (habit.createdAt ? key(new Date(habit.createdAt)) : key()), endDate: habit.endDate || '' }));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = () => {
@@ -13,6 +14,12 @@ function HabitModal({ habit, onClose, onSave }) {
     if (!name) throw new Error('Habit name is required.');
     if (name.length > 40) throw new Error('Name must be 40 characters or fewer.');
     if (f.endDate && f.startDate && f.endDate < f.startDate) throw new Error('End date must be on or after the start date.');
+    const sameName = f._id && normalizeHabitName(name) === normalizeHabitName(habit.name);
+    const becomingActive = isHabitNameActive(f, today) && !isHabitNameActive(habit, today);
+    if (!sameName || becomingActive) {
+      const duplicate = findActiveHabitNameDuplicate(allHabits, name, today, f._id);
+      if (duplicate) throw new Error(`An active habit named “${duplicate.name}” already exists. Edit that habit or choose a different name.`);
+    }
     return onSave({ ...f, name });
   };
   return (
@@ -44,8 +51,9 @@ function HabitModal({ habit, onClose, onSave }) {
   );
 }
 
-export default function HabitList({ habits, archivedHabits = [], days, today, onToggle, onMarkTracked, onSave, onDelete }) {
+export default function HabitList({ habits, allHabits = habits, archivedHabits = [], days, today, onToggle, onMarkTracked, onSave, onDelete }) {
   const [edit, setEdit] = useState(null);
+  const reusablePastHabits = newestPastHabitPerName(archivedHabits);
   const done = days[today]?.done || [];
   const explicitlyTracked = days[today]?.habitsTracked === true;
   const trackedByCompletion = done.length > 0;
@@ -59,8 +67,8 @@ export default function HabitList({ habits, archivedHabits = [], days, today, on
         if (source && action === 'reuse') setEdit({ name: source.name, icon: source.icon || 'target', frequency: source.frequency || 'daily', goal: source.goal || '', reminder: source.reminder || '', startDate: today, endDate: '' });
         if (source && action === 'edit') setEdit(source);
         e.target.value = '';
-      }}><option value="">Past habits...</option><optgroup label="Reuse as a new habit">{archivedHabits.map(h => <option key={`reuse-${h._id}`} value={`reuse:${h._id}`}>{h.name}</option>)}</optgroup><optgroup label="Correct dates in past reports">{archivedHabits.map(h => <option key={`edit-${h._id}`} value={`edit:${h._id}`}>{h.name}</option>)}</optgroup></select>}
-      <button className={btnP} onClick={() => setEdit(blank)}><Plus size={16} />Add Habit</button>
+      }}><option value="">Past habits...</option><optgroup label="Reuse as a new habit">{reusablePastHabits.map(h => <option key={`reuse-${h._id}`} value={`reuse:${h._id}`}>{h.name}</option>)}</optgroup><optgroup label="Correct dates in past reports">{archivedHabits.map(h => <option key={`edit-${h._id}`} value={`edit:${h._id}`}>{pastHabitLabel(h, archivedHabits)}</option>)}</optgroup></select>}
+      <button type="button" className={btnP} onClick={() => setEdit(blank)}><Plus size={16} />Add Habit</button>
     </div>}>
       {habits.length === 0 ? (
         <p className="py-5 text-center text-sm text-zinc-500">No habits yet. Add your first habit to start tracking.</p>
@@ -88,7 +96,7 @@ export default function HabitList({ habits, archivedHabits = [], days, today, on
           })}
         </ul>
       )}
-      {edit && <HabitModal habit={edit} onClose={() => setEdit(null)} onSave={onSave} />}
+      {edit && <HabitModal habit={edit} today={today} allHabits={allHabits} onClose={() => setEdit(null)} onSave={onSave} />}
     </Card>
   );
 }

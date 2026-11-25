@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Pin, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Pin, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '../api';
 import RichEditor from './RichEditor';
 import { Card, btn, btnP, iconBtn, inp } from './ui';
@@ -23,12 +23,28 @@ export default function Notes() {
   const [state, setState] = useState('saved');
   const [ek, setEk] = useState(0); // changes when a note is opened, so the editor reloads its text
   const [err, setErr] = useState('');
+  const [addingTopic, setAddingTopic] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceInsert, setVoiceInsert] = useState(null);
   const saving = useRef(false);
+  const topicLock = useRef(false);
+  const recognitionRef = useRef(null);
+  const voiceInsertId = useRef(0);
   const draftRef = useRef(null);
   draftRef.current = draft;
 
   useEffect(() => {
     Promise.all([api.get('/notes'), api.get('/topics')]).then(([n, t]) => { setNotes(n); setTopics(t); }).catch((e) => setErr(e.message));
+  }, []);
+
+  useEffect(() => () => {
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+    try { recognition.stop(); } catch { /* recognition may already be stopped */ }
   }, []);
 
   const names = useMemo(() => {
@@ -49,10 +65,11 @@ export default function Notes() {
     setErr('');
     try { const full = await api.get('/notes/' + n._id); setDraft({ ...full, content: toHtml(full) }); setEk((k) => k + 1); setDirty(false); setState('saved'); }
     catch (e) { setErr(e.message); }
+    setVoiceInsert(null);
   };
   const create = () => {
     setErr(''); setDraft({ title: '', type: topic === 'All' ? names[0]?.[0] || 'Personal' : topic, section: sub === 'All' ? '' : sub, content: '', pinned: false });
-    setEk((k) => k + 1); setDirty(false); setState('saved');
+    setVoiceInsert(null); setEk((k) => k + 1); setDirty(false); setState('saved');
   };
   const update = (patch) => { setDraft((d) => ({ ...d, ...patch })); setDirty(true); setState('unsaved'); };
 
@@ -82,22 +99,89 @@ export default function Notes() {
     return () => clearTimeout(t);
   }, [draft, dirty]); // eslint-disable-line
 
-  const back = async () => { if (dirty && !(await save())) return; setDraft(null); };
+  const toggleVoiceInput = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* recognition may already be stopped */ }
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setErr('Voice typing is not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
+    setErr('');
+    const recognition = new SpeechRecognition();
+    recognition.lang = navigator.language || 'en-IN';
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const text = Array.from(event.results).slice(event.resultIndex)
+        .filter((result) => result.isFinal)
+        .map((result) => result[0]?.transcript?.trim())
+        .filter(Boolean)
+        .join(' ');
+      if (!text) return;
+      const separator = plain(draftRef.current?.content || '') ? ' ' : '';
+      setVoiceInsert({ id: ++voiceInsertId.current, text: `${separator}${text} ` });
+    };
+    recognition.onerror = (event) => {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setErr('Allow microphone access in your browser to use voice typing.');
+      } else if (event.error === 'network') {
+        setErr('Voice typing needs an internet connection.');
+      } else if (event.error === 'no-speech') {
+        setErr('No speech was detected. Tap Speak and try again.');
+      } else if (event.error !== 'aborted') {
+        setErr(`Voice typing stopped (${event.error || 'unknown error'}).`);
+      }
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setListening(false);
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      recognitionRef.current = null;
+      setListening(false);
+      setErr('Could not start voice typing. Please try again.');
+    }
+  };
+
+  const stopVoiceInput = () => {
+    try { recognitionRef.current?.stop(); } catch { /* recognition may already be stopped */ }
+  };
+
+  const back = async () => { if (dirty && !(await save())) return; stopVoiceInput(); setDraft(null); };
   const del = async () => {
     if (!window.confirm('Delete this note?')) return;
+    stopVoiceInput();
     try { if (draft._id) await api.del('/notes/' + draft._id); setNotes((l) => l.filter((n) => n._id !== draft._id)); setDraft(null); }
     catch (e) { setErr(e.message); }
   };
   const addTopic = async (e) => {
     e.preventDefault();
+    if (topicLock.current) return;
     const name = newTopic.trim();
     if (!name) return;
     const have = names.find(([n]) => n.toLowerCase() === name.toLowerCase());
+    if (!have) {
+      topicLock.current = true;
+      setAddingTopic(true);
+    }
     try {
       const t = have ? { name: have[0] } : await api.post('/topics', { name });
       if (!have) setTopics((l) => [...l, t]);
       setTopic(t.name); setSub('All'); setNewTopic('');
     } catch (x) { setErr(x.message); }
+    finally {
+      if (!have) {
+        topicLock.current = false;
+        setAddingTopic(false);
+      }
+    }
   };
   const delTopic = async (name) => {
     const t = topics.find((x) => x.name === name);
@@ -116,12 +200,16 @@ export default function Notes() {
           </select>
           <input list="subs" aria-label="Sub-topic" className={`${inp} w-32 py-1`} placeholder="Sub-topic" maxLength={40} value={draft.section || ''} onChange={(e) => update({ section: e.target.value })} />
           <datalist id="subs">{subs(draft.type).map((s) => <option key={s} value={s} />)}</datalist>
+          <button type="button" className={`${listening ? 'bg-red-600 text-white hover:bg-red-700' : btn} inline-flex items-center gap-1.5 px-2.5 py-1 text-xs`} onClick={toggleVoiceInput}
+            aria-label={listening ? 'Stop voice typing' : 'Start voice typing'} aria-pressed={listening} title={listening ? 'Stop voice typing' : 'Speak to add text to this note'}>
+            {listening ? <MicOff size={15} /> : <Mic size={15} />}{listening ? 'Listening…' : 'Speak'}
+          </button>
           <span className="ml-auto text-xs text-zinc-500">{state === 'saving' ? 'Saving...' : state === 'saved' ? 'Saved' : 'Unsaved changes'}</span>
           <button className={iconBtn} aria-label="Pin note" onClick={() => update({ pinned: !draft.pinned })}><Pin size={16} className={draft.pinned ? 'text-indigo-500' : ''} /></button>
           <button className={iconBtn} aria-label="Delete note" onClick={del}><Trash2 size={16} /></button>
         </div>
         {err && <p role="alert" className="shrink-0 bg-red-50 px-4 py-1.5 text-xs text-red-600 dark:bg-red-500/10">{err}</p>}
-        <RichEditor key={ek} value={draft.content} onChange={(content) => update({ content })} onError={setErr}
+        <RichEditor key={ek} value={draft.content} voiceInsert={voiceInsert} onChange={(content) => update({ content })} onError={setErr}
           header={<input aria-label="Title" className="mb-4 w-full border-0 bg-transparent text-3xl font-semibold outline-none placeholder:text-zinc-300" placeholder="Untitled" maxLength={120} value={draft.title} onChange={(e) => update({ title: e.target.value })} />} />
       </div>
     );
@@ -141,8 +229,8 @@ export default function Notes() {
           ))}
         </ul>
         <form onSubmit={addTopic} className="mt-3 flex gap-2">
-          <input aria-label="New topic" className={`${inp} py-1`} placeholder="New topic" maxLength={40} value={newTopic} onChange={(e) => setNewTopic(e.target.value)} />
-          <button className={btn} aria-label="Add topic"><Plus size={14} /></button>
+          <input aria-label="New topic" disabled={addingTopic} className={`${inp} py-1`} placeholder="New topic" maxLength={40} value={newTopic} onChange={(e) => setNewTopic(e.target.value)} />
+          <button disabled={addingTopic} className={btn} aria-label="Add topic"><Plus size={14} /></button>
         </form>
       </Card>
       <div className="min-w-0 space-y-4">

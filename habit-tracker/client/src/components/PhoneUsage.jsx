@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Copy, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import { addDays, fmt, key, parse } from '../lib';
@@ -12,10 +12,12 @@ export default function PhoneUsage({ today }) {
   const [rows, setRows] = useState([]);
   const [logs, setLogs] = useState([]);
   const [deviceKey, setDeviceKey] = useState('');
+  const [resettingKey, setResettingKey] = useState(false);
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState('');
   const [m, setM] = useState(() => parse(today).getFullYear() * 12 + parse(today).getMonth());
   const [sel, setSel] = useState(today);
+  const resetLock = useRef(false);
 
   const load = () => Promise.all([api.get('/screentime'), api.get('/device/key'), api.get('/timelogs')])
     .then(([r, k, l]) => { setRows(r); setDeviceKey(k.key); setLogs(l); }).catch((x) => setErr(x.message));
@@ -43,10 +45,28 @@ export default function PhoneUsage({ today }) {
   const d = by[sel];
   const manual = logs.filter((l) => l.date === sel);
 
-  const copy = (text, what) => { navigator.clipboard?.writeText(text); setCopied(what); setTimeout(() => setCopied(''), 1500); };
+  const copy = async (text, what) => {
+    if (!navigator.clipboard?.writeText) {
+      setErr('Clipboard access is unavailable. Select and copy the text manually.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setErr('');
+      setCopied(what);
+      setTimeout(() => setCopied(''), 1500);
+    } catch {
+      setErr('Could not copy to the clipboard. Select and copy the text manually.');
+    }
+  };
   const reset = async () => {
+    if (resetLock.current) return;
     if (!window.confirm('Create a new key? The phone app will stop syncing until you paste the new one.')) return;
-    try { setDeviceKey((await api.post('/device/key/reset', {})).key); } catch (x) { setErr(x.message); }
+    resetLock.current = true;
+    setResettingKey(true);
+    try { setDeviceKey((await api.post('/device/key/reset', {})).key); setErr(''); }
+    catch (x) { setErr(x.message); }
+    finally { resetLock.current = false; setResettingKey(false); }
   };
   const t = by[today];
 
@@ -151,7 +171,7 @@ export default function PhoneUsage({ today }) {
               <button className={`${btn} py-1 text-xs`} onClick={() => copy(v, id)}><Copy size={12} />{copied === id ? 'Copied' : 'Copy'}</button></div>
           </div>
         ))}
-        <button className="mt-3 text-xs text-red-500 hover:underline" onClick={reset}>Create a new key</button>
+        <button disabled={resettingKey} className="mt-3 text-xs text-red-500 hover:underline disabled:opacity-50" onClick={reset}>{resettingKey ? 'Creating key…' : 'Create a new key'}</button>
       </details>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { parse } from './lib';
+import { parse } from './lib.js';
 
 export const ACTIVITY = [
   ['sedentary', 'Mostly sitting (classes, studying)', 1.2],
@@ -18,6 +18,8 @@ export const FOODS = [
 ['Brown bread (2 slices)', 140, 6, 24, 2],
 ['Bread with butter (2 slices)', 220, 5, 27, 10],
 ['Shengdana ladoo (1 piece)', 150, 4, 12, 10],
+  ['Til ladoo (1 piece, 25 g)', 118, 3, 13, 6],
+  ['Buttermilk / chaas (1 glass, 250 ml)', 60, 3, 6, 2],
   ['Boiled egg (1)', 78, 6, 0.6, 5],
   ['Full-fat milk (250 ml)', 150, 8, 12, 8],
   ['Curd (1 bowl)', 120, 7, 10, 5],

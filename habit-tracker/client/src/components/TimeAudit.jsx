@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { addDays, fmt, key, parse } from '../lib';
@@ -19,6 +19,8 @@ export default function TimeAudit({ today }) {
   const [note, setNote] = useState('');
   const [range, setRange] = useState(7);
   const [err, setErr] = useState('');
+  const [adding, setAdding] = useState(false);
+  const addLock = useRef(false);
 
   useEffect(() => {
     Promise.all([api.get('/timelogs'), api.get('/settings')])
@@ -29,10 +31,18 @@ export default function TimeAudit({ today }) {
   const guard = (fn) => async (...a) => { try { setErr(''); await fn(...a); } catch (x) { setErr(x.message); } };
   const add = guard(async (e) => {
     e.preventDefault();
-    const m = Math.round(Number(minutes));
-    if (!(m >= 1 && m <= 720)) throw new Error('Enter minutes between 1 and 720.');
-    const r = await api.post('/timelogs', { date, category: cat, minutes: m, note: note.trim() });
-    setLogs((l) => [...l, r]); setMinutes(''); setNote('');
+    if (addLock.current) return;
+    addLock.current = true;
+    setAdding(true);
+    try {
+      const m = Math.round(Number(minutes));
+      if (!(m >= 1 && m <= 720)) throw new Error('Enter minutes between 1 and 720.');
+      const r = await api.post('/timelogs', { date, category: cat, minutes: m, note: note.trim() });
+      setLogs((l) => [...l, r]); setMinutes(''); setNote('');
+    } finally {
+      addLock.current = false;
+      setAdding(false);
+    }
   });
   const del = guard(async (id) => { await api.del('/timelogs/' + id); setLogs((l) => l.filter((x) => x._id !== id)); });
   const saveLimit = guard(async (e) => {
@@ -76,7 +86,7 @@ export default function TimeAudit({ today }) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {QUICK.map((q) => <button type="button" key={q} onClick={() => setMinutes(String(q))} className={`${btn} py-1 text-xs`}>{hm(q)}</button>)}
-                <button className={`${btnP} ml-auto`}>Add</button>
+                <button disabled={adding} className={`${btnP} ml-auto`}>{adding ? 'Adding…' : 'Add'}</button>
               </div>
             </form>
           </Card>

@@ -20,7 +20,7 @@ function GoalModal({ goal, onClose, onSave }) {
     <Modal title={f._id ? 'Edit goal' : 'New goal'} onClose={onClose} onSubmit={submit}>
       <Field label="Title"><input autoFocus className={inp} value={f.title} onChange={set('title')} placeholder="e.g. Learn DSA" /></Field>
       <Field label="Description (optional)"><textarea rows={2} className={inp} value={f.description} onChange={set('description')} /></Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Category"><input className={inp} value={f.category} onChange={set('category')} placeholder="Career" /></Field>
         <Field label="Unit"><input className={inp} value={f.unit} onChange={set('unit')} placeholder="Problems" /></Field>
         <Field label="Target"><input type="number" min="1" className={inp} value={f.target} onChange={set('target')} /></Field>
@@ -39,11 +39,11 @@ function GoalCard({ g, onEdit, onDelete, onPatch }) {
   const setMs = (m) => onPatch(g, { milestones: m });
   const addMs = (e) => { e.preventDefault(); if (nm.trim()) { setMs([...ms, { title: nm.trim(), done: false }]); setNm(''); } };
   return (
-    <li className="rounded-xl border border-zinc-100 p-4 dark:border-zinc-800">
+    <li className="min-w-0 rounded-xl border border-zinc-100 p-4 dark:border-zinc-800">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate font-medium">{g.title}</h3>
-          <p className="text-xs text-zinc-500">{g.category || 'General'}{g.description && ` | ${g.description}`}</p>
+          <p className="break-words text-xs text-zinc-500">{g.category || 'General'}{g.description && ` | ${g.description}`}</p>
         </div>
         <div className="flex shrink-0">
           <button className={iconBtn} aria-label={`Edit ${g.title}`} onClick={() => onEdit(g)}><Pencil size={15} /></button>
@@ -55,7 +55,7 @@ function GoalCard({ g, onEdit, onDelete, onPatch }) {
       </div>
       <div className="mt-2"><Bar value={p} /></div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
-        <span>{left} {g.unit} remaining{g.deadline && `, due ${fmt(g.deadline, { month: 'short', day: 'numeric', year: 'numeric' })}`}{daysLeft !== null && (daysLeft < 0 ? ' (overdue)' : ` (${daysLeft}d left)`)}</span>
+        <span className="min-w-0 break-words">{left} {g.unit} remaining{g.deadline && `, due ${fmt(g.deadline, { month: 'short', day: 'numeric', year: 'numeric' })}`}{daysLeft !== null && (daysLeft < 0 ? ' (overdue)' : ` (${daysLeft}d left)`)}</span>
         {ms.length === 0 && (
           <span className="flex items-center gap-1">
             <button aria-label="Decrease" className={iconBtn} onClick={() => onPatch(g, { current: Math.max(0, g.current - 1) })}><Minus size={14} /></button>
@@ -70,8 +70,8 @@ function GoalCard({ g, onEdit, onDelete, onPatch }) {
               className={`grid h-4 w-4 place-items-center rounded border transition ${m.done ? 'border-indigo-600 bg-indigo-600' : 'border-zinc-300 dark:border-zinc-600'}`}>
               {m.done && <Check size={11} strokeWidth={3} className="text-white" />}
             </button>
-            <span className={`flex-1 ${m.done ? 'text-zinc-400 line-through' : ''}`}>{m.title}</span>
-            <button aria-label={`Remove ${m.title}`} className="text-zinc-300 opacity-0 transition hover:text-red-500 focus:opacity-100 group-hover:opacity-100" onClick={() => setMs(ms.filter((_, j) => j !== i))}><X size={14} /></button>
+            <span className={`min-w-0 flex-1 break-words ${m.done ? 'text-zinc-400 line-through' : ''}`}>{m.title}</span>
+            <button aria-label={`Remove ${m.title}`} className="text-zinc-400 opacity-100 transition hover:text-red-500 focus-visible:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100" onClick={() => setMs(ms.filter((_, j) => j !== i))}><X size={14} /></button>
           </li>
         ))}
       </ul>
