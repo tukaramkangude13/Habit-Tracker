@@ -6,7 +6,7 @@ export const ACTIVITY = [
   ['moderate', 'Moderate (3-5 workouts a week)', 1.55],
   ['active', 'Very active (hard training daily)', 1.725]
 ];
-
+// imp
 // [name, kcal, protein, carbs, fat] per serving
 // Nutrition values are approximate.
 export const FOODS = [
