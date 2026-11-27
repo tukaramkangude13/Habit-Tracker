@@ -13,6 +13,7 @@ export const FOODS = [
   ['Roti (1)', 100, 3, 18, 2],
   ['Cooked rice (1 cup)', 200, 4, 45, 0.5],
   ['Dal (1 bowl)', 150, 9, 20, 4],
+  ['Baati (1 piece, approx. 80 g)', 280, 7.2, 40, 9.6],
   ['Paneer (100 g)', 265, 18, 3, 20],
   ['White bread (2 slices)', 140, 5, 26, 2],
 ['Brown bread (2 slices)', 140, 6, 24, 2],

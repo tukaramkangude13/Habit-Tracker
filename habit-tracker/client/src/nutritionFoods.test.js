@@ -8,4 +8,5 @@ test('quick-add foods include local ladoo and buttermilk servings', () => {
   assert.ok(names.some((name) => name.includes('shengdana ladoo')));
   assert.ok(names.some((name) => name.includes('til ladoo')));
   assert.ok(names.some((name) => name.includes('buttermilk')));
+  assert.ok(names.some((name) => name.startsWith('baati')));
 });
